@@ -22,6 +22,7 @@ import aiohttp
 from rich.prompt import Confirm, IntPrompt, Prompt
 
 from config import (
+    C,
     DATA_DIR, MAX_CONCURRENCY, PROJECT_ROOT, USERNAME_CHARS,
     AppSettings, Config, RunConfig, ensure_dir, is_valid_username,
 )
