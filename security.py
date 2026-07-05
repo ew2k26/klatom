@@ -216,11 +216,6 @@ def anti_extraction():
 # LAYER 4: HWID AUTHORIZATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Authorized HWIDs (add your machines here)
-_AUTHORIZED_HWIDS = [
-    "f30ed9a7f098b5ecdcfe8a07",  # Your main machine
-]
-
 def get_hwid() -> str:
     """Generate machine fingerprint."""
     try:
@@ -245,14 +240,8 @@ def get_hwid() -> str:
 
 
 def check_hwid():
-    """Verify this machine is authorized. Kill if not."""
-    hwid = get_hwid()
-    if hwid == "unknown":
-        _kill()
-    # For now, allow all machines (HWID lock can be enabled later)
-    # To enable: uncomment the lines below
-    # if hwid not in _AUTHORIZED_HWIDS:
-    #     _kill()
+    """HWID check disabled — all machines allowed."""
+    pass
 
 
 # ══════════════════════════════════════════════════════════════════════════════

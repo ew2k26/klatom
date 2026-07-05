@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Klatom v2.1.0 – Discord username checker. MAXIMUM SECURITY."""
+from __future__ import annotations
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SECURITY FIRST — runs BEFORE any other import
@@ -58,8 +59,6 @@ def _pre_security():
 
 _pre_security()
 # ══════════════════════════════════════════════════════════════════════════════
-
-from __future__ import annotations
 
 import asyncio.sslproto as _sslproto
 _orig_eof = _sslproto.SSLProtocol.eof_received
