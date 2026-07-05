@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Klatom v2.0.0 – Configuration."""
+"""Klatom v3.0.2 - Configuration."""
 
 from __future__ import annotations
 
@@ -15,12 +15,13 @@ if getattr(sys, 'frozen', False):
 else:
     PROJECT_ROOT = Path(__file__).resolve().parent
 
-DATA_DIR = PROJECT_ROOT / "data"
-LOGS_DIR = PROJECT_ROOT / "logs"
-RESULTS_DIR = PROJECT_ROOT / "results"
+APPDATA_DIR = Path.home() / "AppData" / "Local" / "Klatom"
+DATA_DIR = APPDATA_DIR / "data"
+LOGS_DIR = APPDATA_DIR / "logs"
+RESULTS_DIR = APPDATA_DIR / "results"
 CHECKED_FILE = RESULTS_DIR / "checked.txt"
 
-VERSION = "3.0.0"
+VERSION = "3.0.2"
 ENDPOINT = "https://discord.com/api/v9/unique-username/username-attempt-unauthed"
 USERNAME_CHARS = string.ascii_lowercase + string.digits + "_" + "."
 MAX_CONCURRENCY = 500
@@ -92,7 +93,7 @@ class Config:
         if "webhook" in key.lower() or "discord.com/api/webhooks" in val:
             parts = val.rsplit("/", 1)
             if len(parts) == 2 and len(parts[1]) > 8:
-                return parts[0] + "/" + "•" * (len(parts[1]) - 8) + parts[1][-8:]
+                return parts[0] + "/" + "\u2022" * (len(parts[1]) - 8) + parts[1][-8:]
         return val
 
     def get_all(self) -> dict:
