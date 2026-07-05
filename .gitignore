@@ -1,0 +1,15 @@
+# Build artifacts
+build/
+dist/
+*.spec
+__pycache__/
+
+# Runtime data (created by exe)
+data/
+logs/
+results/
+
+# Local only
+*.ico
+*.png
+*.tmp
