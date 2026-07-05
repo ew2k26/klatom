@@ -1,21 +1,17 @@
 #!/usr/bin/env python3
-"""Klatom v2.1.0 – Discord username checker. MAXIMUM SECURITY."""
+"""Klatom v2.1.1 – Discord username checker. MAXIMUM SECURITY."""
 from __future__ import annotations
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECURITY FIRST — runs BEFORE any other import
-# ══════════════════════════════════════════════════════════════════════════════
 import os, sys
 
 def _pre_security():
-    """Anti-debug + anti-VM BEFORE anything loads."""
+    """Quick anti-debug + anti-VM BEFORE anything loads."""
     try:
-        import ctypes, platform, subprocess, time
+        import ctypes, platform
 
         if platform.system() != "Windows":
             return
 
-        # Quick anti-debug
         try:
             kernel32 = ctypes.windll.kernel32
             if kernel32.IsDebuggerPresent():
@@ -30,35 +26,14 @@ def _pre_security():
         except Exception:
             pass
 
-        # Quick timing check
-        t1 = time.perf_counter()
-        _ = sum(range(30000))
-        t2 = time.perf_counter()
-        if (t2 - t1) > 0.03:
-            os._exit(1)
-
-        # Quick VM check
-        vm_files = [
-            r"C:\Windows\System32\vmGuestLib.dll",
-            r"C:\Windows\System32\VBoxHook.dll",
-            r"C:\Windows\System32\SbieDll.dll",
-            r"C:\Program Files\VMware",
-            r"C:\Program Files\Oracle\VirtualBox",
-        ]
-        for f in vm_files:
-            if os.path.exists(f):
-                os._exit(1)
-
-        # Quick username check
         user = os.environ.get("USERNAME", "").lower()
-        if any(x in user for x in ("sandbox", "malware", "test", "virus")):
+        if any(x in user for x in ("sandbox", "malware")):
             os._exit(1)
 
     except Exception:
         pass
 
 _pre_security()
-# ══════════════════════════════════════════════════════════════════════════════
 
 import asyncio.sslproto as _sslproto
 _orig_eof = _sslproto.SSLProtocol.eof_received
@@ -84,8 +59,7 @@ for _n in ("aiohttp", "aiohttp.client", "aiohttp.access", "aiohttp.internal"):
 warnings.filterwarnings("ignore", message=".*[Uu]nclosed.*")
 warnings.filterwarnings("ignore", message=".*[Cc]onnection.*")
 
-# Full security init
-from security import security_init, anti_debug, anti_vm, anti_extraction
+from security import security_init
 security_init()
 
 import atexit, subprocess
@@ -135,7 +109,7 @@ from pathlib import Path as _P
 
 from config import (
     DATA_DIR, LOGS_DIR, MAX_CONCURRENCY, RESULTS_DIR, CHECKED_FILE,
-    AppSettings, Config, RunConfig, Stats, ensure_dir, ensure_file, load_lines,
+    AppSettings, Config, RunConfig, Stats, ensure_dir, ensure_file, load_lines, C,
 )
 from ui import (
     banner, card, console, config_summary, fail, final_summary, info, ok,
@@ -293,7 +267,6 @@ async def _run_checker(cfg: RunConfig, settings: AppSettings) -> None:
                 f"[{C.MUTED}]{pct:.1f}%[/]"
             )
 
-    from config import C
     progress = asyncio.create_task(_progress_loop())
     await asyncio.gather(*tasks)
     progress.cancel()

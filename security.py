@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Klatom – Maximum Security Module (anti-piracy, anti-clone, anti-tamper).
-
-This module runs BEFORE anything else. If any check fails, the program dies
-silently with no error message.
-"""
+"""Klatom – Maximum Security Module."""
 
 from __future__ import annotations
 
@@ -20,12 +16,8 @@ import time
 import uuid
 from pathlib import Path
 
-# ══════════════════════════════════════════════════════════════════════════════
-# LAYER 1: ANTI-DEBUG (immediate kill)
-# ══════════════════════════════════════════════════════════════════════════════
 
 def _kill():
-    """Silent death — no error, no traceback."""
     try:
         os._exit(1)
     except Exception:
@@ -36,23 +28,19 @@ def _kill():
 
 
 def anti_debug():
-    """Multi-layer debugger detection."""
     if platform.system() != "Windows":
         return
-
     try:
-        # Layer 1a: Environment variables
-        for env in os.environ:
-            low = env.lower()
-            if any(x in low for x in ("debug", "pydev", "pycharm", "remote_debug")):
-                _kill()
-
-        # Layer 1b: IsDebuggerPresent
         kernel32 = ctypes.windll.kernel32
         if kernel32.IsDebuggerPresent():
             _kill()
-
-        # Layer 1c: NtQueryInformationProcess (DebugPort)
+        try:
+            is_debug = ctypes.c_bool(False)
+            if kernel32.CheckRemoteDebuggerPresent(kernel32.GetCurrentProcess(), ctypes.byref(is_debug)):
+                if is_debug.value:
+                    _kill()
+        except Exception:
+            pass
         try:
             ntdll = ctypes.windll.ntdll
             handle = kernel32.GetCurrentProcess()
@@ -62,153 +50,30 @@ def anti_debug():
                     _kill()
         except Exception:
             pass
-
-        # Layer 1d: CheckRemoteDebuggerPresent
-        try:
-            is_debug = ctypes.c_bool(False)
-            if kernel32.CheckRemoteDebuggerPresent(kernel32.GetCurrentProcess(), ctypes.byref(is_debug)):
-                if is_debug.value:
-                    _kill()
-        except Exception:
-            pass
-
-        # Layer 1e: Timing attack detection
-        t1 = time.perf_counter()
-        _ = sum(range(50000))
-        t2 = time.perf_counter()
-        if (t2 - t1) > 0.05:
-            _kill()
-
-        # Layer 1f: Parent process check
-        try:
-            r = subprocess.run(
-                ["wmic", "process", "where", f"processid={os.getppid()}", "get", "name"],
-                capture_output=True, text=True, timeout=3,
-            )
-            parent = r.stdout.strip().lower()
-            bad = ("x64dbg", "ollydbg", "ida", "windbg", "dnspy", "de4dot",
-                   "pycharm", "code.exe", "fiddler", "httpanalyzer")
-            for b in bad:
-                if b in parent:
-                    _kill()
-        except Exception:
-            pass
     except Exception:
         pass
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# LAYER 2: ANTI-VM / SANDBOX / ANALYSIS
-# ══════════════════════════════════════════════════════════════════════════════
 
 def anti_vm():
-    """Detect virtual machines, sandboxes, and analysis tools."""
     if platform.system() != "Windows":
         return
-
     try:
-        # VM file artifacts
-        vm_files = [
-            r"C:\Windows\System32\vmGuestLib.dll",
-            r"C:\Windows\System32\vm3dum.dll",
-            r"C:\Windows\System32\VBoxHook.dll",
-            r"C:\Windows\System32\vboxmrxnp.dll",
-            r"C:\Windows\System32\SbieDll.dll",
-            r"C:\Windows\System32\SxIn.dll",
-            r"C:\Program Files\VMware",
-            r"C:\Program Files\Oracle\VirtualBox",
-            r"C:\Program Files\Sandboxie",
-            r"C:\Program Files\Xen",
-            r"C:\Program Files\Qemu",
-        ]
-        for f in vm_files:
-            if os.path.exists(f):
-                _kill()
-
-        # Low RAM (< 3GB = likely VM)
-        try:
-            r = subprocess.run(
-                ["wmic", "OS", "get", "TotalVisibleMemorySize"],
-                capture_output=True, text=True, timeout=5,
-            )
-            for line in r.stdout.splitlines():
-                line = line.strip()
-                if line.isdigit() and int(line) < 3_000_000:
-                    _kill()
-        except Exception:
-            pass
-
-        # Analysis tools in process list
-        try:
-            r = subprocess.run("tasklist", capture_output=True, text=True, timeout=5)
-            low = r.stdout.lower()
-            tools = ("wireshark", "fiddler", "charles", "burp", "procmon",
-                     "procmon64", "apimonitor", "die", "pestudio", "exeinfope",
-                     "detect it easy", "x32dbg", "x64dbg", "ollydbg",
-                     "processhacker", "tcpview", "autoruns", "procexp")
-            for t in tools:
-                if t in low:
-                    _kill()
-        except Exception:
-            pass
-
-        # Username check (common sandbox usernames)
-        try:
-            user = os.environ.get("USERNAME", "").lower()
-            sandbox_users = ("sandbox", "malware", "test", "virust", "john doe",
-                           "currentuser", "sandboxie", "virus")
-            for s in sandbox_users:
-                if s in user:
-                    _kill()
-        except Exception:
-            pass
-
-        # Disk size check (< 60GB = likely VM)
-        try:
-            import shutil
-            total = shutil.disk_usage("C:\\").total
-            if total < 60 * 1024**3:
-                _kill()
-        except Exception:
-            pass
+        user = os.environ.get("USERNAME", "").lower()
+        if any(x in user for x in ("sandbox", "malware")):
+            _kill()
     except Exception:
         pass
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# LAYER 3: ANTI-EXTRACTION (detect PyInstaller unpackers)
-# ══════════════════════════════════════════════════════════════════════════════
 
 def anti_extraction():
-    """Detect if running from extracted PyInstaller bundle."""
     try:
         if not getattr(sys, "frozen", False):
-            frame = sys._getframe(1) if hasattr(sys, "_getframe") else None
-            if frame:
-                _kill()
-
-        # Check for common extraction tools
-        if platform.system() == "Windows":
-            try:
-                r = subprocess.run("tasklist", capture_output=True, text=True, timeout=5)
-                low = r.stdout.lower()
-                extractors = ("pyinstextractor", "pyi-archive", "pyinstaller",
-                             "unpyc", "decompyle", " uncompyle", "pycdc")
-                for e in extractors:
-                    if e in low:
-                        _kill()
-            except Exception:
-                pass
+            pass
     except Exception:
         pass
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# LAYER 4: HWID AUTHORIZATION
-# ══════════════════════════════════════════════════════════════════════════════
-
 def get_hwid() -> str:
-    """Generate machine fingerprint."""
     try:
         parts = [platform.node(), platform.machine(), platform.processor(), str(uuid.getnode())]
         for cmd, field in [
@@ -231,18 +96,12 @@ def get_hwid() -> str:
 
 
 def check_hwid():
-    """HWID check disabled — all machines allowed."""
     pass
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# LAYER 5: RUNTIME INTEGRITY
-# ══════════════════════════════════════════════════════════════════════════════
 
 _INTEGRITY_SEED = b"klatom-integrity-check-2025"
 
 def compute_integrity() -> str:
-    """Compute integrity hash of running exe."""
     try:
         if getattr(sys, "frozen", False):
             exe_path = Path(sys.executable)
@@ -258,13 +117,8 @@ def compute_integrity() -> str:
 
 
 def verify_integrity(stored_hash: str) -> bool:
-    """Verify integrity hasn't been tampered."""
     return hmac.compare_digest(compute_integrity(), stored_hash)
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# LAYER 6: ENCRYPTED STORAGE (AES-256-GCM equivalent via HMAC-SHA256)
-# ══════════════════════════════════════════════════════════════════════════════
 
 _ENC_SALT = b"\xa3\x8f\x1b\xd4\x6e\x2c\x9a\x07\xf5\x12\x8b\x3d\xc6\x4e\x70\xa1"
 _HMAC_KEY = b"\x71\xdc\x3f\x92\xb8\x54\xe6\x0a\x1d\x47\xcf\x83\x6b\x29\xf0\x55"
@@ -286,7 +140,6 @@ def _hmac(data: bytes) -> str:
 
 
 def _derive_enc_keys(master_key: bytes, salt: bytes) -> tuple[bytes, bytes]:
-    """Derive encryption key + MAC key from master key via HKDF-like construction."""
     enc_key = hashlib.pbkdf2_hmac("sha256", master_key, salt + b"\x01", 3, dklen=32)
     mac_key = hashlib.pbkdf2_hmac("sha256", master_key, salt + b"\x02", 3, dklen=32)
     return enc_key, mac_key
@@ -344,10 +197,6 @@ def load_encrypted(path: Path) -> dict | None:
         return None
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# LAYER 7: TOKEN MANAGEMENT
-# ══════════════════════════════════════════════════════════════════════════════
-
 def generate_token() -> str:
     return f"KLATOM-{os.urandom(4).hex().upper()}-{os.urandom(4).hex().upper()}-{os.urandom(4).hex().upper()}"
 
@@ -403,12 +252,7 @@ def ensure_creator(auth_path: Path) -> None:
         save_auth(auth_path, [hash_token("CREATOR")])
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# MASTER INIT — Call this FIRST in checker.py
-# ══════════════════════════════════════════════════════════════════════════════
-
 def security_init():
-    """Run ALL security checks. Call this before any other import."""
     anti_debug()
     anti_vm()
     anti_extraction()
