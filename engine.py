@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
-"""Klatom – Checker engine with circuit breaker."""
+"""Klatom - Checker engine."""
 
 from __future__ import annotations
 
 import asyncio
+import random
 import time
-from dataclasses import dataclass, field
 
 import aiohttp
 
 from config import C, ENDPOINT, RunConfig, Stats
+
+_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
+]
 
 
 class Checker:
@@ -32,11 +38,23 @@ class Checker:
         self.session = aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(limit=min(self.cfg.concurrency * 2, 500)),
             timeout=aiohttp.ClientTimeout(total=self.cfg.timeout),
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": random.choice(_USER_AGENTS),
+                "Accept": "*/*",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Origin": "https://discord.com",
+                "Referer": "https://discord.com/",
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "same-origin",
+            },
         )
 
     async def close(self) -> None:
         if self.session:
             await self.session.close()
+            self.session = None
         if self._batch_timer:
             self._batch_timer.cancel()
 
@@ -61,6 +79,10 @@ class Checker:
                 status = resp.status
 
                 if status == 200:
+                    body = await resp.json()
+                    if body.get("taken") is True or body.get("taken") == "true":
+                        await self.stats.inc_taken()
+                        return "TAKEN", username
                     await self.stats.inc_works()
                     self._consecutive_errors.clear()
                     await self._on_hit(username)
@@ -79,8 +101,11 @@ class Checker:
                 self._record_error(proxy)
                 return "ERROR", username
 
-        except (aiohttp.ClientError, asyncio.TimeoutError):
-            await self.stats.inc_requests()
+        except (aiohttp.ClientError, asyncio.TimeoutError, Exception):
+            try:
+                await self.stats.inc_requests()
+            except Exception:
+                pass
             self._record_error(proxy)
             return "ERROR", username
 
