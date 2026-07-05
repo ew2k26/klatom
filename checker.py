@@ -1,37 +1,34 @@
 ﻿#!/usr/bin/env python3
-"""Klatom v3.0.0 - Discord username checker."""
+"""Klatom v3.1 - Discord username availability checker."""
+
 from __future__ import annotations
 
-import sys, os, logging, warnings, asyncio
+import asyncio.sslproto as _sslproto
 
+_orig_eof = _sslproto.SSLProtocol.eof_received
+
+def _safe_eof(self):
+    try:
+        return _orig_eof(self)
+    except RuntimeError:
+        return False
+
+_sslproto.SSLProtocol.eof_received = _safe_eof
+
+import asyncio.proactor_events as _proactor
+_orig_cl = _proactor._ProactorBasePipeTransport._call_connection_lost
+def _silent_cl(self, exc):
+    try:
+        _orig_cl(self, exc)
+    except ConnectionResetError:
+        pass
+_proactor._ProactorBasePipeTransport._call_connection_lost = _silent_cl
+
+import logging, warnings
 for _n in ("aiohttp", "aiohttp.client", "aiohttp.access", "aiohttp.internal"):
     logging.getLogger(_n).setLevel(logging.CRITICAL)
 warnings.filterwarnings("ignore", message=".*[Uu]nclosed.*")
 warnings.filterwarnings("ignore", message=".*[Cc]onnection.*")
-
-try:
-    import asyncio.sslproto as _sslproto
-    _orig_eof = _sslproto.SSLProtocol.eof_received
-    def _safe_eof(self):
-        try:
-            return _orig_eof(self)
-        except RuntimeError:
-            return False
-    _sslproto.SSLProtocol.eof_received = _safe_eof
-except Exception:
-    pass
-
-try:
-    import asyncio.proactor_events as _proactor
-    _orig_cl = _proactor._ProactorBasePipeTransport._call_connection_lost
-    def _silent_cl(self, exc):
-        try:
-            _orig_cl(self, exc)
-        except ConnectionResetError:
-            pass
-    _proactor._ProactorBasePipeTransport._call_connection_lost = _silent_cl
-except Exception:
-    pass
 
 import ctypes
 try:
@@ -39,190 +36,276 @@ try:
     u = ctypes.windll.user32
     h = k.GetConsoleWindow()
     if h:
-        u.SetWindowTextW(h, "Klatom v3.0.0 - Discord Username Checker")
+        u.SetWindowTextW(h, "Klatom v3.1 - Discord Username Checker")
 except Exception:
     pass
 
-import argparse, asyncio, random, sys, time
+import argparse
+import asyncio
+import sys
+import time
 from pathlib import Path
 
+import aiohttp
+from rich.live import Live
+
 from config import (
-    DATA_DIR, LOGS_DIR, MAX_CONCURRENCY, RESULTS_DIR, CHECKED_FILE,
-    AppSettings, Config, RunConfig, Stats, ensure_dir, ensure_file, load_lines, C,
+    PROJECT_ROOT,
+    DATA_DIR,
+    LOGS_DIR,
+    MAX_CONCURRENCY,
+    RESULTS_DIR,
+    AppSettings,
+    Config,
+    RunConfig,
+    Stats,
+    ensure_dir,
+    ensure_file,
+    load_lines,
+)
+from proxy import ProxyManager
+from engine import (
+    Checker,
+    CircuitBreaker,
+    WebhookSender,
+    set_debug,
+    dbg,
 )
 from ui import (
-    banner, card, console, config_summary, fail, final_summary, info, ok,
-    progress_steps, section, warn_card,
+    C,
+    banner,
+    console,
+    final_summary,
+    live_card,
 )
-from engine import Checker
 from wizard import setup_wizard
-from auth import check_auth, show_session_info
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Klatom")
-    parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--no-wizard", action="store_true")
-    parser.add_argument("--resume", action="store_true")
-    parser.add_argument("--clear", action="store_true")
+def parse_args() -> AppSettings:
+    parser = argparse.ArgumentParser(description="Klatom - Discord username checker")
+    parser.add_argument("-d", "--debug", action="store_true")
+    parser.add_argument("-n", "--no-wizard", action="store_true")
+    parser.add_argument("--version", action="version", version=f"Klatom v{__import__('config').VERSION}")
     args = parser.parse_args()
-
-    settings = AppSettings(debug=args.debug, no_wizard=args.no_wizard,
-                           resume=args.resume, clear=args.clear)
-    config = Config()
-
-    if settings.clear:
-        for f in [CHECKED_FILE, RESULTS_DIR / "hits.txt", RESULTS_DIR / "takens.txt"]:
-            if f.exists():
-                f.unlink()
-        ok("Cleared results")
-        return
-
-    asyncio.run(_run(settings, config))
+    return AppSettings(debug=args.debug, no_wizard=args.no_wizard)
 
 
-async def _run(settings: AppSettings, config: Config) -> None:
-    console.clear()
-    console.print(banner())
-    console.print()
-
-    webhook_url = config.get("webhook", "")
-
-    authorized, token = await check_auth(webhook_url)
-    if not authorized:
-        return
-
-    if settings.no_wizard:
-        run_config = _load_saved_config(config)
-        if not run_config:
-            fail("No saved config. Run without --no-wizard first.")
-            return
-    else:
-        run_config = await setup_wizard(config, settings)
-        config.set("last_proxies", run_config.proxies)
-        config.set("last_concurrency", run_config.concurrency)
-        config.set("last_timeout", run_config.timeout)
-
-    if not run_config.usernames:
-        fail("No usernames to check!")
-        return
-
-    await _run_checker(run_config, settings)
-
-
-def _load_saved_config(config: Config) -> RunConfig | None:
-    proxies = config.get("last_proxies", [])
-    concurrency = config.get("last_concurrency", 50)
-    timeout = config.get("last_timeout", 5)
-    names_file = config.get("last_names_file", str(DATA_DIR / "names.txt"))
-    names = load_lines(names_file)
-    if not names:
-        return None
-    return RunConfig(
-        proxies=proxies, remove_bad=True, usernames=names,
-        concurrency=concurrency, timeout=timeout,
-        webhook_url=config.get("webhook"),
-        webhook_msg=config.get("webhook_message"),
-    )
+async def _rps_calculator(stats: Stats, stop_event: asyncio.Event) -> None:
+    while not stop_event.is_set():
+        prev_req = stats.requests
+        prev_done = stats.works + stats.taken
+        await asyncio.sleep(1)
+        await stats.set_rps(float(stats.requests - prev_req))
+        await stats.set_checks_rps(float(stats.works + stats.taken - prev_done))
 
 
 async def _run_checker(cfg: RunConfig, settings: AppSettings) -> None:
-    ensure_dir(RESULTS_DIR)
     _hits_path = RESULTS_DIR / "hits.txt"
-    _taken_path = RESULTS_DIR / "takens.txt"
+    _hits_path.parent.mkdir(parents=True, exist_ok=True)
     _hits_file = _hits_path.open("a", encoding="utf-8")
-    _taken_file = _taken_path.open("a", encoding="utf-8")
-
-    checked_names: set[str] = set()
-    if settings.resume and CHECKED_FILE.exists():
-        checked_names = set(load_lines(CHECKED_FILE))
-        info(f"Resumed with {len(checked_names)} checked")
-
-    remaining = [u for u in cfg.usernames if u not in checked_names]
-    if not remaining:
-        ok("All usernames already checked!")
-        return
-
-    random.shuffle(remaining)
-
-    stats = Stats()
-    checker = Checker(cfg, stats, cfg.webhook_url or "",
-                      cfg.webhook_msg or "**<name>** available | <t:time:R>")
-    await checker.start()
-
-    _checked_file = CHECKED_FILE.open("a", encoding="utf-8")
-    _checked_lock = asyncio.Lock()
     _hits_lock = asyncio.Lock()
-    _taken_lock = asyncio.Lock()
-    _rate_count = 0
 
-    sem = asyncio.Semaphore(cfg.concurrency)
+    pm = ProxyManager(cfg.proxies, remove_on_fail=cfg.remove_bad_proxies, scored=cfg.scraped)
+    stats = Stats()
     start_time = time.time()
-    done_count = 0
+    proxyless = not cfg.proxies
 
-    section("Checking")
-    info(f"{len(remaining)} usernames | {len(cfg.proxies)} proxies | {cfg.concurrency} workers")
+    if cfg.concurrency > MAX_CONCURRENCY:
+        cfg.concurrency = MAX_CONCURRENCY
 
-    async def _worker(username: str):
-        nonlocal done_count, _rate_count
-        async with sem:
-            result, name = await checker.check(username)
+    try:
+        import resource as _resource
+        _soft, _hard = _resource.getrlimit(_resource.RLIMIT_NOFILE)
+        _resource.setrlimit(_resource.RLIMIT_NOFILE, (_hard if _hard > 1024 else 4096, _hard))
+    except Exception:
+        pass
 
-            async with _checked_lock:
-                _checked_file.write(f"{name}\n")
-                _checked_file.flush()
+    connector = aiohttp.TCPConnector(
+        limit=MAX_CONCURRENCY * 2,
+        limit_per_host=0,
+        force_close=False,
+        enable_cleanup_closed=True,
+        ttl_dns_cache=300,
+    )
+    session_timeout = aiohttp.ClientTimeout(total=None, sock_connect=5, sock_read=30)
+    session = aiohttp.ClientSession(
+        connector=connector,
+        trust_env=False,
+        timeout=session_timeout,
+    )
 
-            if result == "HIT":
-                async with _hits_lock:
-                    _hits_file.write(f"{name}\n")
-                    _hits_file.flush()
-                ok(f"AVAILABLE: {name}")
-            elif result == "TAKEN":
-                async with _taken_lock:
-                    _taken_file.write(f"{name}\n")
-                    _taken_file.flush()
-            elif result == "RATE":
-                _rate_count += 1
-                if _rate_count >= 5:
-                    checker.open_circuit(3)
-                    _rate_count = 0
+    cb: CircuitBreaker | None = None
+    paused = False
+    if pm.is_single and not pm.is_proxyless:
+        async def _on_circuit_open():
+            nonlocal paused
+            paused = True
+            await stats.inc_circuit_open()
+            await asyncio.sleep(2.0)
+            paused = False
+        cb = CircuitBreaker(threshold=10, window=2.0, cooldown=2.0, on_open=_on_circuit_open)
 
-            done_count += 1
+    http_timeout = 5 if proxyless else cfg.timeout
+    checker = Checker(pm, timeout=http_timeout, scraped=cfg.scraped, circuit_breaker=cb, stats=stats)
 
-    tasks = [asyncio.create_task(_worker(u)) for u in remaining]
+    webhook: WebhookSender | None = None
+    if cfg.webhook_url and cfg.webhook_message:
+        webhook = WebhookSender(cfg.webhook_url, cfg.webhook_message, session, start_time)
 
-    async def _progress_loop():
-        while not all(t.done() for t in tasks):
-            await asyncio.sleep(2)
-            elapsed = time.time() - start_time
-            rps = done_count / elapsed if elapsed > 0 else 0
-            await stats.set_rps(rps)
-            pct = done_count / len(remaining) * 100
-            console.print(
-                f"  [{C.PRIMARY}]{done_count}/{len(remaining)}[/] "
-                f"[{C.SUCCESS}]{stats.works}[/] hit | "
-                f"[{C.DANGER}]{stats.taken}[/] taken | "
-                f"[{C.MUTED}]{rps:.0f} rps[/] | "
-                f"[{C.MUTED}]{pct:.1f}%[/]"
-            )
+    names = list(cfg.usernames)
+    total = len(names)
+    _idx_lock = asyncio.Lock()
+    _next_idx = 0
 
-    progress = asyncio.create_task(_progress_loop())
-    await asyncio.gather(*tasks)
-    progress.cancel()
+    async def _next_task() -> tuple[int, str] | None:
+        nonlocal _next_idx
+        async with _idx_lock:
+            if _next_idx >= total:
+                return None
+            i = _next_idx
+            _next_idx += 1
+        return i, names[i]
 
-    await checker.flush_remaining()
-    await checker.close()
+    recent_hits: list[str] = []
+    request_log: list[str] = []
+
+    async def _worker(worker_id: int) -> None:
+        while True:
+            t = await _next_task()
+            if t is None:
+                return
+            idx, name = t
+            try:
+                result, data, code = await checker.check(session, name)
+                if result is True:
+                    await stats.inc_works()
+                    async with _hits_lock:
+                        _hits_file.write(f"{name}\n")
+                        _hits_file.flush()
+                    recent_hits.append(name)
+                    request_log.append(f"[{C.SUCCESS}]\u2713[/] {name}")
+                    if webhook:
+                        webhook.enqueue(name)
+                elif result is False:
+                    await stats.inc_taken()
+                    request_log.append(f"[{C.DANGER}]\u2717[/] {name}")
+                elif result == "EXHAUSTED":
+                    request_log.append(f"[{C.WARNING}]![/] proxies exhausted")
+                else:
+                    request_log.append(f"[{C.WARNING}]?[/] {name}")
+                if proxyless:
+                    await asyncio.sleep(cfg.timeout)
+            except Exception:
+                request_log.append(f"[{C.DANGER}]!![/] {name}")
+                continue
+
+    stop_rps = asyncio.Event()
+    rps_task = asyncio.create_task(_rps_calculator(stats, stop_rps))
+    webhook_task = asyncio.create_task(webhook.run()) if webhook else None
+
+    pending: set[asyncio.Task] = {
+        asyncio.create_task(_worker(i)) for i in range(cfg.concurrency)
+    }
+
+    def _live_render():
+        return live_card(
+            done=stats.works + stats.taken,
+            total=total,
+            works=stats.works,
+            taken=stats.taken,
+            requests=stats.requests,
+            ratelimited=stats.ratelimited,
+            circuit_opens=stats.circuit_opens,
+            rps=stats.rps,
+            checks_rps=stats.checks_rps,
+            elapsed=time.time() - start_time,
+            proxy_alive=pm.alive_count,
+            paused=paused,
+            recent=recent_hits,
+            feed=request_log,
+        )
+
+    console.print()
+    try:
+        with Live(_live_render(), refresh_per_second=4, console=console) as live:
+            while pending:
+                await asyncio.sleep(0.3)
+                pending = {w for w in pending if not w.done()}
+                while _next_idx < total and len(pending) < cfg.concurrency:
+                    pending.add(asyncio.create_task(_worker(len(pending))))
+                if not pending and _next_idx >= total:
+                    break
+                live.update(_live_render())
+    except asyncio.CancelledError:
+        pass
+    finally:
+        stop_rps.set()
+        rps_task.cancel()
+        for w in pending:
+            w.cancel()
+        if webhook_task:
+            webhook_task.cancel()
+        await asyncio.sleep(0)
+
+    elapsed = time.time() - start_time
+    snap = await stats.snapshot()
 
     _hits_file.close()
-    _taken_file.close()
-    _checked_file.close()
+    await session.close()
 
-    duration = time.time() - start_time
-    snap = await stats.snapshot()
-    final_summary(snap, duration)
+    final_summary(
+        requests=snap["requests"],
+        works=snap["works"],
+        taken=snap["taken"],
+        ratelimited=snap["ratelimited"],
+        circuit_opens=snap["circuit_opens"],
+        elapsed=elapsed,
+        peak_rps=snap["peak_rps"],
+        best_streak=snap["best_streak"],
+    )
 
-    if snap["works"] > 0:
-        console.print(f"\n  [{C.SUCCESS}]Hits saved to results/hits.txt[/]")
+
+def main() -> None:
+    settings = parse_args()
+    set_debug(settings.debug)
+
+    ensure_dir(DATA_DIR, LOGS_DIR, RESULTS_DIR)
+    ensure_file(DATA_DIR / "config.json")
+    ensure_file(DATA_DIR / "proxies.txt")
+    ensure_file(DATA_DIR / "names_to_check.txt")
+    ensure_file(LOGS_DIR / "error.txt", clean=True)
+
+    config = Config()
+
+    try:
+        if settings.no_wizard:
+            proxy_file = config.get("last_proxy_file", str(DATA_DIR / "proxies.txt"))
+            names_file = config.get("last_names_file", str(DATA_DIR / "names_to_check.txt"))
+            proxies = load_lines(proxy_file)
+            usernames = load_lines(names_file)
+            if not proxies:
+                console.print(f"[{C.WARNING}]No proxies found - running proxyless.[/]")
+            if not usernames:
+                console.print(f"[{C.DANGER}]No usernames found. Run without --no-wizard first.[/]")
+                sys.exit(1)
+            run_config = RunConfig(
+                proxies=proxies,
+                remove_bad_proxies=config.get("remove_proxies", False),
+                usernames=usernames,
+                concurrency=config.get("concurrency", 50),
+                timeout=config.get("timeout", 10),
+                scraped=False,
+                webhook_url=config.get("webhook"),
+                webhook_message=config.get("webhook_message"),
+            )
+            console.print(f"[{C.MUTED}]Skipping wizard - {len(proxies)} proxies, {len(usernames)} usernames[/]")
+        else:
+            run_config = asyncio.run(setup_wizard(config, settings))
+
+        asyncio.run(_run_checker(run_config, settings))
+    except (EOFError, KeyboardInterrupt):
+        console.print(f"\n[{C.WARNING}]Aborted.[/]")
+        sys.exit(0)
 
 
 if __name__ == "__main__":
@@ -231,7 +314,6 @@ if __name__ == "__main__":
     except Exception as e:
         import traceback
         try:
-            from ui import console
             console.print(f"\n[bold red]Fatal error:[/] {e}")
             traceback.print_exc()
         except Exception:
