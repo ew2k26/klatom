@@ -20,7 +20,7 @@ LOGS_DIR = PROJECT_ROOT / "logs"
 RESULTS_DIR = PROJECT_ROOT / "results"
 CHECKED_FILE = RESULTS_DIR / "checked.txt"
 
-VERSION = "2.0.0"
+VERSION = "3.0.0"
 ENDPOINT = "https://discord.com/api/v9/unique-username/username-attempt-unauthed"
 USERNAME_CHARS = string.ascii_lowercase + string.digits + "_" + "."
 MAX_CONCURRENCY = 500

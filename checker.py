@@ -1,6 +1,22 @@
 ﻿#!/usr/bin/env python3
-"""Klatom v2.2.0 - Discord username checker."""
+"""Klatom v3.0.0 - Discord username checker."""
 from __future__ import annotations
+
+
+import ctypes
+def _setup_window():
+    try:
+        k = ctypes.windll.kernel32
+        u = ctypes.windll.user32
+        h = k.GetConsoleWindow()
+        if h:
+            u.SetWindowTextW(h, "Klatom v3.0.0 - Discord Username Checker")
+            hd = k.GetStdHandle(-11)
+            m = ctypes.c_ulong()
+            k.GetConsoleMode(hd, ctypes.byref(m))
+            k.SetConsoleMode(hd, m.value | 0x0004)
+    except: pass
+_setup_window()
 
 import asyncio.sslproto as _sslproto
 _orig_eof = _sslproto.SSLProtocol.eof_received
