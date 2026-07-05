@@ -29,7 +29,7 @@ from ui import (
     banner, card, config_summary, console, fail, info, ok,
     progress_steps, section, warn_card,
 )
-from github_loader import fetch_all, decrypt_url
+from github_loader import fetch_names, fetch_all, decrypt_url
 
 _PROXY_RE = re.compile(
     r"^(?:https?://)?(?:[^@\s]+@)?[a-zA-Z0-9](?:[a-zA-Z0-9\-.]*[a-zA-Z0-9])?:\d{1,5}$"
@@ -94,21 +94,17 @@ async def setup_wizard(config: Config, settings: AppSettings) -> RunConfig:
     console.print()
     console.print(progress_steps(0))
 
-    # Step 1: Proxies
     section("Proxies")
     proxies, remove_bad, scraped = await _step_proxies(config)
 
-    # Step 2: Usernames — from GitHub
     console.print()
     console.print(progress_steps(1))
     usernames = await _step_usernames(config)
 
-    # Step 3: Speed
     console.print()
     console.print(progress_steps(2))
     concurrency, timeout = _step_speed(proxies, scraped)
 
-    # Step 4: Webhook
     console.print()
     console.print(progress_steps(3))
     webhook_url, webhook_msg = _step_webhook(config)
@@ -124,8 +120,8 @@ async def setup_wizard(config: Config, settings: AppSettings) -> RunConfig:
 
 async def _step_proxies(config: Config) -> tuple[list[str], bool, bool]:
     raw = Prompt.ask(
-        f"[{C.PRIMARY}](f)ile[/]  [{C.PRIMARY}](p)aste[/]  [{C.PRIMARY}](s)crape[/]  [{C.PRIMARY}](g)itHub[/]  [{C.PRIMARY}](n)one[/]",
-        choices=["f", "p", "s", "g", "n"], default="s",
+        f"[{C.PRIMARY}](f)ile[/]  [{C.PRIMARY}](p)aste[/]  [{C.PRIMARY}](s)crape[/]  [{C.PRIMARY}](g)itHub[/]  [{C.PRIMARY}](t)est speed[/]  [{C.PRIMARY}](n)one[/]",
+        choices=["f", "p", "s", "g", "t", "n"], default="s",
     )
     mode = raw
 
@@ -178,12 +174,23 @@ async def _step_proxies(config: Config) -> tuple[list[str], bool, bool]:
     if mode == "s":
         proxies = await _scrape_proxies()
 
+    if mode == "t":
+        proxies = await _scrape_proxies()
+        if proxies:
+            ok(f"Testing {len(proxies)} proxies for speed...")
+            fast = await speed_test_proxies(proxies)
+            if fast:
+                proxies = fast
+                ok(f"{len(proxies)} fast proxies selected")
+            else:
+                warn_card("Speed test found no fast proxies — using all scraped.")
+
     if mode == "n":
         info("Running without proxies — 1 worker with delay")
         return [], False, False
 
     remove_bad = Confirm.ask(f"[{C.PRIMARY}]Auto-remove dead proxies?[/]", default=True)
-    return proxies, remove_bad, mode == "s"
+    return proxies, remove_bad, mode in ("s", "t")
 
 
 async def _scrape_proxies() -> list[str]:
@@ -191,7 +198,6 @@ async def _scrape_proxies() -> list[str]:
     info(f"Scraping from {len(PROXY_SOURCES)} sources...")
 
     sem = asyncio.Semaphore(30)
-    total = len(PROXY_SOURCES)
     done = 0
 
     async def fetch_one(name: str, url: str) -> list[str]:
@@ -220,21 +226,29 @@ async def _scrape_proxies() -> list[str]:
     return unique
 
 
-async def _step_usernames(config: Config) -> list[str]:
+async def _step_usernames(config: Config, _depth: int = 0) -> list[str]:
+    if _depth > 3:
+        fail("Too many failed attempts — returning empty list")
+        return []
+
     raw = Prompt.ask(
-        f"[{C.PRIMARY}](g)itHub[/]  [{C.PRIMARY}](f)ile[/]  [{C.PRIMARY}](p)aste[/]",
-        choices=["g", "f", "p"], default="g",
+        f"[{C.PRIMARY}](g)itHub[/]  [{C.PRIMARY}](f)ile[/]  [{C.PRIMARY}](p)aste[/]  [{C.PRIMARY}](r)andom generate[/]",
+        choices=["g", "f", "p", "r"], default="g",
     )
 
     if raw == "g":
         info("Fetching usernames from GitHub...")
-        names = await fetch_names()
-        if names:
-            ok(f"Loaded {len(names)} usernames from GitHub")
-            return names
-        else:
-            fail("GitHub fetch failed — try file or paste")
-            return await _step_usernames(config)
+        try:
+            names = await fetch_names()
+            if names:
+                ok(f"Loaded {len(names)} usernames from GitHub")
+                return names
+            else:
+                fail("GitHub fetch failed — try file, paste, or generate")
+                return await _step_usernames(config, _depth + 1)
+        except Exception as e:
+            fail(f"GitHub error: {e}")
+            return await _step_usernames(config, _depth + 1)
 
     if raw == "f":
         path = Prompt.ask("Path to username file", default="data/names.txt")
@@ -247,7 +261,7 @@ async def _step_usernames(config: Config) -> list[str]:
                 ok(f"Loaded {len(names)} usernames")
                 return names
         fail("File empty or missing")
-        return await _step_usernames(config)
+        return await _step_usernames(config, _depth + 1)
 
     if raw == "p":
         info("Paste usernames (empty line to finish):")
@@ -262,9 +276,100 @@ async def _step_usernames(config: Config) -> list[str]:
             ok(f"Got {len(names)} valid usernames")
             return names
         fail("No valid usernames")
-        return await _step_usernames(config)
+        return await _step_usernames(config, _depth + 1)
+
+    if raw == "r":
+        return _generate_usernames()
 
     return []
+
+
+def _generate_usernames() -> list[str]:
+    length = IntPrompt.ask("Username length", default=4, choices=["2", "3", "4", "5"])
+    total = len(USERNAME_CHARS) ** length
+    target = min(50000, total)
+
+    ok(f"Generating {target} random {length}-char usernames (of {total:,} possible)...")
+    seen: set[str] = set()
+    usernames: list[str] = []
+    attempts = 0
+    max_attempts = target * 20
+    while len(usernames) < target and attempts < max_attempts:
+        attempts += 1
+        cand = "".join(random.choices(USERNAME_CHARS, k=length))
+        if cand not in seen and is_valid_username(cand):
+            seen.add(cand)
+            usernames.append(cand)
+
+    ok(f"Generated {len(usernames)} {length}-char usernames")
+
+    from config import ensure_file
+    from config import safe_write if hasattr(config, 'safe_write') else None
+    names_path = DATA_DIR / "names.txt"
+    names_path.parent.mkdir(parents=True, exist_ok=True)
+    names_path.write_text("\n".join(usernames), encoding="utf-8")
+
+    return usernames
+
+
+async def speed_test_proxies(proxies: list[str]) -> list[str]:
+    """Test proxies concurrently, return only working ones sorted by speed."""
+    from config import ENDPOINT
+
+    test_pool = list(proxies)
+    total = len(test_pool)
+    info(f"Testing {total} proxies for speed...")
+
+    sem = asyncio.Semaphore(200)
+    results: list[tuple[str, float]] = []
+    tested = 0
+    lock = asyncio.Lock()
+
+    async def _test_one(sess: aiohttp.ClientSession, proxy_raw: str) -> None:
+        nonlocal tested
+        async with sem:
+            proxy = proxy_raw.strip()
+            if not proxy.startswith("http"):
+                proxy = f"http://{proxy}"
+            try:
+                start = time.time()
+                async with sess.post(
+                    ENDPOINT,
+                    json={"username": "a"},
+                    proxy=proxy,
+                    headers={"Content-Type": "application/json"},
+                ) as resp:
+                    if resp.status in (200, 201, 204, 400, 429):
+                        latency = time.time() - start
+                        async with lock:
+                            results.append((proxy_raw, latency))
+            except Exception:
+                pass
+            async with lock:
+                tested += 1
+            if tested % 200 == 0 or tested == total:
+                info(f"  {tested}/{total} tested")
+
+    connector = aiohttp.TCPConnector(limit=200, limit_per_host=0, ttl_dns_cache=300)
+    async with aiohttp.ClientSession(
+        connector=connector,
+        timeout=aiohttp.ClientTimeout(total=5),
+        trust_env=False,
+    ) as sess:
+        tasks = [_test_one(sess, p) for p in test_pool]
+        await asyncio.gather(*tasks)
+
+    if not results:
+        fail("No working proxies found")
+        return []
+
+    results.sort(key=lambda x: x[1])
+
+    ok(f"{len(results)}/{total} alive (sorted by speed)")
+    for proxy, lat in results[:5]:
+        console.print(f"  [{C.SUCCESS}]{lat:.2f}s[/] {proxy}")
+
+    return [p for p, _ in results]
 
 
 def _step_speed(proxies: list[str], scraped: bool) -> tuple[int, int]:

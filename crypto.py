@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Klatom – Encrypted auth + HWID + token hashing."""
+"""Klatom – Encrypted auth + HWID + token hashing (HARDENED)."""
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import hmac
 import json
 import os
 import platform
 import subprocess
+import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -18,6 +19,50 @@ _HMAC_KEY = b"\x71\xdc\x3f\x92\xb8\x54\xe6\x0a\x1d\x47\xcf\x83\x6b\x29\xf0\x55"
 _TOKEN_SECRET = b"\xe9\x4a\x17\xd3\x6f\x82\xbc\x05\x3d\x91\x7e\x46\xab\x28\xcf\x50"
 _KDF_ITERS = 500_000
 
+_debugger_detected = False
+
+def _check_debugger() -> bool:
+    global _debugger_detected
+    if _debugger_detected:
+        return True
+    try:
+        for env in ("PYDEVD", "PYCHARM_DEBUG", "REMOTE_DEBUG", "DEBUGPY_RUNNING"):
+            if os.environ.get(env):
+                _debugger_detected = True
+                return True
+        if platform.system() == "Windows":
+            try:
+                import ctypes
+                kernel32 = ctypes.windll.kernel32
+                if kernel32.IsDebuggerPresent():
+                    _debugger_detected = True
+                    return True
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return False
+
+_integrity_hash: str | None = None
+
+def _compute_integrity() -> str:
+    global _integrity_hash
+    if _integrity_hash:
+        return _integrity_hash
+    try:
+        if getattr(sys, 'frozen', False):
+            exe_path = Path(sys.executable)
+        else:
+            exe_path = Path(__file__)
+        h = hashlib.sha256()
+        with open(exe_path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                h.update(chunk)
+        _integrity_hash = h.hexdigest()[:32]
+    except Exception:
+        _integrity_hash = "no-integrity"
+    return _integrity_hash
+
 
 def get_hwid() -> str:
     try:
@@ -25,6 +70,7 @@ def get_hwid() -> str:
         for cmd, field in [
             (["wmic", "baseboard", "get", "serialnumber"], "SerialNumber"),
             (["wmic", "diskdrive", "get", "serialnumber"], "SerialNumber"),
+            (["wmic", "bios", "get", "serialnumber"], "SerialNumber"),
         ]:
             try:
                 r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
@@ -55,25 +101,40 @@ def _hmac(data: bytes) -> str:
 
 def save_encrypted(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    plaintext = json.dumps(data, separators=(",", ":")).encode()
+    data_with_meta = dict(data)
+    data_with_meta["_t"] = int(time.time())
+    data_with_meta["_i"] = _compute_integrity()
+    plaintext = json.dumps(data_with_meta, separators=(",", ":")).encode()
     key = _derive_key(get_hwid())
     salt = os.urandom(16)
     cipher_key = hashlib.pbkdf2_hmac("sha256", key, salt, 3, dklen=32)
     encrypted = _xor(plaintext, cipher_key)
-    payload = {"s": salt.hex(), "d": encrypted.hex(), "h": _hmac(plaintext)}
-    tmp = path.with_suffix(".tmp")
-    try:
-        tmp.write_text(json.dumps(payload), encoding="utf-8")
-        tmp.replace(path)
-    except Exception:
-        path.write_text(json.dumps(payload), encoding="utf-8")
+    payload = {"s": salt.hex(), "d": encrypted.hex(), "h": _hmac(plaintext), "v": 3}
+    for attempt in range(3):
+        try:
+            tmp = path.with_suffix(f".tmp{attempt}")
+            tmp.write_text(json.dumps(payload), encoding="utf-8")
+            tmp.replace(path)
+            return
+        except Exception:
+            if attempt == 2:
+                try:
+                    path.write_text(json.dumps(payload), encoding="utf-8")
+                except Exception:
+                    pass
+            time.sleep(0.01)
 
 
 def load_encrypted(path: Path) -> dict | None:
     if not path.exists():
         return None
+    if _check_debugger():
+        return None
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
+        version = raw.get("v", 0)
+        if version < 2:
+            return None
         salt = bytes.fromhex(raw["s"])
         encrypted = bytes.fromhex(raw["d"])
         expected_hmac = raw["h"]
@@ -82,7 +143,10 @@ def load_encrypted(path: Path) -> dict | None:
         plaintext = _xor(encrypted, cipher_key)
         if not hmac.compare_digest(_hmac(plaintext), expected_hmac):
             return None
-        return json.loads(plaintext)
+        data = json.loads(plaintext)
+        data.pop("_t", None)
+        data.pop("_i", None)
+        return data
     except Exception:
         return None
 
@@ -129,7 +193,7 @@ def add_token_hash(auth_path: Path, token: str) -> None:
 
 
 def save_session(session_path: Path, trial_start: float, hwid: str) -> None:
-    save_encrypted(session_path, {"ts": trial_start, "th": hwid, "v": 1})
+    save_encrypted(session_path, {"ts": trial_start, "th": hwid, "v": 1, "te": trial_start + 86400})
 
 
 def load_session(session_path: Path) -> dict | None:
