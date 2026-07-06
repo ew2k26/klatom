@@ -277,16 +277,29 @@ class ModApp(tk.Tk):
         ).pack(side="left", padx=(0, 8), ipady=4)
 
         def _revoke():
-            token = self._revoke_var.get().strip()
-            if not token:
+            raw = self._revoke_var.get().strip()
+            if not raw:
+                messagebox.showwarning("KLATOM", "Enter a token number to revoke.")
                 return
-            if token in tokens:
-                tokens.remove(token)
-                TOKENS_FILE.write_text(json.dumps(tokens, indent=2), encoding="utf-8")
-                messagebox.showinfo("KLATOM", f"Token revoked.\nRemaining: {len(tokens)}")
-                self._show_tokens()
-            else:
-                messagebox.showwarning("KLATOM", "Token not found.")
+            try:
+                idx = int(raw) - 1
+                if 0 <= idx < len(tokens):
+                    token = tokens[idx]
+                    tokens.pop(idx)
+                    TOKENS_FILE.write_text(json.dumps(tokens, indent=2), encoding="utf-8")
+                    messagebox.showinfo("KLATOM", f"Token revoked.\nRemaining: {len(tokens)}")
+                    self._show_tokens()
+                else:
+                    messagebox.showwarning("KLATOM", f"Invalid number. Enter 1-{len(tokens)}.")
+            except ValueError:
+                # Not a number - try as full token string
+                if raw in tokens:
+                    tokens.remove(raw)
+                    TOKENS_FILE.write_text(json.dumps(tokens, indent=2), encoding="utf-8")
+                    messagebox.showinfo("KLATOM", f"Token revoked.\nRemaining: {len(tokens)}")
+                    self._show_tokens()
+                else:
+                    messagebox.showwarning("KLATOM", "Token not found.")
 
         self._make_button(revoke_frame, "Revoke", DANGER, _revoke, fg="#fff", hover_bg="#CC3A30").pack(side="left")
 
@@ -532,7 +545,7 @@ class ModApp(tk.Tk):
             messagebox.showinfo("KLATOM", "All auth data cleared.")
             self._show_session()
 
-        self._make_button(frame, "Clear All Auth", DANGER, _clear, fg="#fff", bg=DANGER, hover_bg="#CC3A30").pack(anchor="w", pady=(24, 0))
+        self._make_button(frame, "Clear All Auth", DANGER, _clear, fg="#fff", hover_bg="#CC3A30").pack(anchor="w", pady=(24, 0))
 
     # ── Helpers ──
 

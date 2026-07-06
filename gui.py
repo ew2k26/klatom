@@ -168,7 +168,7 @@ class App(tk.Tk):
 
         self._make_button(
             btn_frame, "Start Free Trial (24h)", BG3, self._start_trial,
-            fg=WARNING, bg=BG3, hover_bg=BORDER,
+            fg=WARNING, hover_bg=BORDER,
         ).pack(side="left", padx=(0, 10))
 
         # Message
@@ -221,49 +221,65 @@ class App(tk.Tk):
             self._auth_msg.configure(text="Enter a license token", fg=DANGER)
             return
 
-        from auth import is_token_approved, add_approved_token
-        if is_token_approved(token):
-            self._auth_msg.configure(text="Token approved", fg=SUCCESS)
-            self.after(500, self._show_wizard_screen)
-            return
+        try:
+            from auth import is_token_approved, add_approved_token
 
-        # First run: auto-approve
-        auth_file = DATA_DIR / ".auth"
-        from crypto import load_auth
-        data = load_auth(auth_file)
-        if data is None or not data.get("t"):
-            add_approved_token("CREATOR")
-            add_approved_token(token)
-            self._auth_msg.configure(text="Creator token registered", fg=SUCCESS)
-            self.after(500, self._show_wizard_screen)
-            return
+            if is_token_approved(token):
+                self._auth_msg.configure(text="Token approved", fg=SUCCESS)
+                self.update_idletasks()
+                self.after(400, self._show_wizard_screen)
+                return
 
-        self._auth_msg.configure(text="Invalid or expired token", fg=DANGER)
+            # First run: auto-approve any token
+            auth_file = DATA_DIR / ".auth"
+            from crypto import load_auth
+            data = load_auth(auth_file)
+            if data is None or not data.get("t"):
+                add_approved_token("CREATOR")
+                add_approved_token(token)
+                self._auth_msg.configure(text="Creator token registered", fg=SUCCESS)
+                self.update_idletasks()
+                self.after(400, self._show_wizard_screen)
+                return
+
+            self._auth_msg.configure(text="Invalid or expired token", fg=DANGER)
+        except Exception as e:
+            self._auth_msg.configure(text=f"Error: {e}", fg=DANGER)
 
     def _start_trial(self) -> None:
-        from auth import _activate_trial
-        _activate_trial()
-        self._auth_msg.configure(text="Free trial activated (24h)", fg=SUCCESS)
-        self.after(500, self._show_wizard_screen)
+        try:
+            from auth import _activate_trial
+            _activate_trial()
+            self._auth_msg.configure(text="Free trial activated (24h)", fg=SUCCESS)
+            self.update_idletasks()
+            self.after(400, self._show_wizard_screen)
+        except Exception as e:
+            self._auth_msg.configure(text=f"Error: {e}", fg=DANGER)
 
     # ── Wizard Screen ──
 
     def _show_wizard_screen(self) -> None:
-        self._clear_body()
-        self._status_label.configure(text="  Setup  ", fg=PRIMARY)
+        try:
+            self._clear_body()
+            self._status_label.configure(text="  Setup  ", fg=PRIMARY)
 
-        self._wizard_data = {
-            "proxies": [],
-            "scraped": False,
-            "remove_bad": True,
-            "usernames": [],
-            "concurrency": 50,
-            "timeout": 10,
-            "webhook_url": None,
-            "webhook_msg": None,
-        }
+            self._wizard_data = {
+                "proxies": [],
+                "scraped": False,
+                "remove_bad": True,
+                "usernames": [],
+                "concurrency": 50,
+                "timeout": 10,
+                "webhook_url": None,
+                "webhook_msg": None,
+            }
 
-        self._build_wizard_step(0)
+            self._build_wizard_step(0)
+        except Exception as e:
+            self._clear_body()
+            frame = tk.Frame(self._body, bg=BG)
+            frame.pack(expand=True, fill="both", padx=30, pady=30)
+            tk.Label(frame, text=f"Error: {e}", font=("Segoe UI", 12), fg=DANGER, bg=BG).pack()
 
     def _build_wizard_step(self, step: int) -> None:
         for w in self._body.winfo_children():
@@ -1175,7 +1191,7 @@ class App(tk.Tk):
         ).pack(side="left", padx=(0, 10))
         self._make_button(
             btn_frame, "Exit", BG3, self.destroy,
-            fg=TXT, bg=BG3, hover_bg=BORDER,
+            fg=TXT, hover_bg=BORDER,
         ).pack(side="left")
 
     # ── Helpers ──
