@@ -87,9 +87,10 @@ def parse_args() -> AppSettings:
     parser = argparse.ArgumentParser(description="KLATOM - Discord username checker")
     parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument("-n", "--no-wizard", action="store_true")
+    parser.add_argument("-m", "--mod", action="store_true", help="Launch mod panel")
     parser.add_argument("--version", action="version", version=f"KLATOM v{__import__('config').VERSION}")
     args = parser.parse_args()
-    return AppSettings(debug=args.debug, no_wizard=args.no_wizard)
+    return AppSettings(debug=args.debug, no_wizard=args.no_wizard, mod=args.mod)
 
 
 async def _rps_calculator(stats: Stats, stop_event: asyncio.Event) -> None:
@@ -309,6 +310,22 @@ def main() -> None:
     ensure_file(LOGS_DIR / "error.txt", clean=True)
 
     config = Config()
+
+    # Auto-detect mod build by exe name
+    exe_name = ""
+    try:
+        import sys as _sys
+        if getattr(_sys, 'frozen', False):
+            exe_name = Path(_sys.executable).stem.lower()
+    except Exception:
+        pass
+
+    is_mod = settings.mod or "mod" in exe_name
+
+    if is_mod:
+        from test_mode import main as mod_main
+        mod_main()
+        return
 
     try:
         if settings.no_wizard:

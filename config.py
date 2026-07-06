@@ -107,6 +107,7 @@ class AppSettings:
     debug: bool = False
     verbose: bool = False
     no_wizard: bool = False
+    mod: bool = False
 
 
 @dataclass

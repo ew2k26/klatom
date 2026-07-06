@@ -239,50 +239,50 @@ class ProxyManager:
                 async with lock:
                     tested[0] += 1
                     results.append((proxy or "", 99999.0, False))
-                    if on_progress and tested[0] % 50 == 0:
-                        await on_progress(tested[0], len(self._proxies), working_count[0])
-                return
-
-            start = time.time()
-            is_ok = False
-            try:
-                async with aiohttp.ClientSession(
-                    timeout=aiohttp.ClientTimeout(total=timeout),
-                    trust_env=False,
-                ) as sess:
-                    async with sess.post(
-                        ENDPOINT,
-                        json={"username": "a"},
-                        proxy=proxy,
-                        headers={"Content-Type": "application/json"},
-                    ) as resp:
-                        is_ok = resp.status in (200, 201, 204)
-            except Exception:
-                pass
-
-            latency_ms = (time.time() - start) * 1000
-            async with lock:
-                tested[0] += 1
-                if is_ok:
-                    working_count[0] += 1
-                results.append((proxy or "", latency_ms, is_ok))
                 if on_progress and tested[0] % 50 == 0:
-                    await on_progress(tested[0], len(self._proxies), working_count[0])
+                    on_progress(tested[0], len(self._proxies), working_count[0])
+            return
 
-        tasks = [_test_one(p) for p in self._proxies]
-        await asyncio.gather(*tasks)
+        start = time.time()
+        is_ok = False
+        try:
+            async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=timeout),
+                trust_env=False,
+            ) as sess:
+                async with sess.post(
+                    ENDPOINT,
+                    json={"username": "a"},
+                    proxy=proxy,
+                    headers={"Content-Type": "application/json"},
+                ) as resp:
+                    is_ok = resp.status in (200, 201, 204)
+        except Exception:
+            pass
 
-        # sort: working first by latency, then dead
-        results.sort(key=lambda x: (not x[2], x[1]))
+        latency_ms = (time.time() - start) * 1000
+        async with lock:
+            tested[0] += 1
+            if is_ok:
+                working_count[0] += 1
+            results.append((proxy or "", latency_ms, is_ok))
+            if on_progress and tested[0] % 50 == 0:
+                on_progress(tested[0], len(self._proxies), working_count[0])
 
-        # update internal latency data for working proxies
-        for proxy, latency_ms, is_ok in results:
-            if is_ok and latency_ms < 99999:
-                self._latencies[proxy] = latency_ms / 1000.0
-                self._latency_count[proxy] = 1
+    tasks = [_test_one(p) for p in self._proxies]
+    await asyncio.gather(*tasks)
 
-        if on_progress:
-            await on_progress(len(self._proxies), len(self._proxies), working_count[0])
+    # sort: working first by latency, then dead
+    results.sort(key=lambda x: (not x[2], x[1]))
+
+    # update internal latency data for working proxies
+    for proxy, latency_ms, is_ok in results:
+        if is_ok and latency_ms < 99999:
+            self._latencies[proxy] = latency_ms / 1000.0
+            self._latency_count[proxy] = 1
+
+    if on_progress:
+        on_progress(len(self._proxies), len(self._proxies), working_count[0])
 
         return results
 
