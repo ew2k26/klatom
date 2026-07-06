@@ -1,5 +1,5 @@
 ﻿#!/usr/bin/env python3
-"""Klatom v3.1 - Discord username availability checker."""
+"""KLATOM v3.2 - Discord username availability checker."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ try:
     u = ctypes.windll.user32
     h = k.GetConsoleWindow()
     if h:
-        u.SetWindowTextW(h, "KLATOM v3.1 - Discord Username Checker")
+        u.SetWindowTextW(h, "KLATOM v3.2 - Discord Username Checker")
 except Exception:
     pass
 
@@ -77,15 +77,17 @@ from ui import (
     console,
     final_summary,
     live_card,
+    speed_test_progress,
+    speed_test_result,
 )
 from wizard import setup_wizard
 
 
 def parse_args() -> AppSettings:
-    parser = argparse.ArgumentParser(description="Klatom - Discord username checker")
+    parser = argparse.ArgumentParser(description="KLATOM - Discord username checker")
     parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument("-n", "--no-wizard", action="store_true")
-    parser.add_argument("--version", action="version", version=f"Klatom v{__import__('config').VERSION}")
+    parser.add_argument("--version", action="version", version=f"KLATOM v{__import__('config').VERSION}")
     args = parser.parse_args()
     return AppSettings(debug=args.debug, no_wizard=args.no_wizard)
 
@@ -112,6 +114,32 @@ async def _run_checker(cfg: RunConfig, settings: AppSettings) -> None:
 
     if cfg.concurrency > MAX_CONCURRENCY:
         cfg.concurrency = MAX_CONCURRENCY
+
+    # Speed test scraped proxies before starting
+    working_proxies = 0
+    if cfg.scraped and len(cfg.proxies) > 10:
+        console.print()
+        console.print(f"[{C.PRIMARY}]Speed testing {len(cfg.proxies)} proxies...[/]")
+        console.print()
+
+        def _on_progress(tested, total, working):
+            speed_test_progress(tested, total, working)
+
+        results = await pm.speed_test(
+            concurrency=200,
+            timeout=8.0,
+            on_progress=_on_progress,
+        )
+        console.print()
+        working_proxies = await pm.apply_speed_results(results, remove_slow=True, max_latency_ms=3000)
+        speed_test_result(results)
+
+        if working_proxies == 0:
+            console.print(f"[{C.DANGER}]No working proxies found. Try again or use different sources.[/]")
+            return
+
+        console.print(f"[{C.SUCCESS}]Using {working_proxies} fast proxies[/]")
+        console.print()
 
     try:
         import resource as _resource
@@ -192,10 +220,12 @@ async def _run_checker(cfg: RunConfig, settings: AppSettings) -> None:
                 elif result == "EXHAUSTED":
                     request_log.append(f"[{C.WARNING}]![/] proxies exhausted")
                 else:
-                    request_log.append(f"[{C.WARNING}]?[/] {name}")
+                    await stats.inc_errors()
+                    request_log.append(f"[{C.DANGER}]x[/] {name}")
                 if proxyless:
                     await asyncio.sleep(cfg.timeout)
             except Exception:
+                await stats.inc_errors()
                 request_log.append(f"[{C.DANGER}]!![/] {name}")
                 continue
 
@@ -221,6 +251,8 @@ async def _run_checker(cfg: RunConfig, settings: AppSettings) -> None:
             elapsed=time.time() - start_time,
             proxy_alive=pm.alive_count,
             paused=paused,
+            errors=stats.errors,
+            avg_latency=pm.avg_latency * 1000 if pm.avg_latency > 0 else 0,
             recent=recent_hits,
             feed=request_log,
         )
@@ -262,6 +294,7 @@ async def _run_checker(cfg: RunConfig, settings: AppSettings) -> None:
         elapsed=elapsed,
         peak_rps=snap["peak_rps"],
         best_streak=snap["best_streak"],
+        errors=snap["errors"],
     )
 
 

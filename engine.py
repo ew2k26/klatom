@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CloudChecker v3.1 – Checker engine, circuit breaker, error aggregation, webhook."""
+"""KLATOM v3.2 - Checker engine, circuit breaker, error aggregation, webhook."""
 
 from __future__ import annotations
 
@@ -11,10 +11,6 @@ import aiohttp
 
 from proxy import ProxyManager
 
-# ---------------------------------------------------------------------------
-# Debug control
-# ---------------------------------------------------------------------------
-
 _debug: bool = False
 
 
@@ -24,30 +20,21 @@ def set_debug(enabled: bool) -> None:
 
 
 def dbg(*args, **kwargs) -> None:
-    """Debug print – only when --debug is active."""
     if _debug:
         print(*args, file=sys.stderr, flush=True, **kwargs)
 
 
 # ---------------------------------------------------------------------------
-# Circuit breaker – prevents thundering herd on rotating proxy
+# Circuit breaker
 # ---------------------------------------------------------------------------
 
 class CircuitBreaker:
-    """Shared across all workers using a single rotating proxy.
-
-    When too many connection failures happen in a short window,
-    the circuit opens and all workers pause briefly before retrying.
-    This prevents hammering a struggling gateway while still ensuring
-    every username eventually gets checked.
-    """
-
     def __init__(
         self,
         threshold: int = 8,
         window: float = 2.0,
         cooldown: float = 2.0,
-        on_open = None,
+        on_open=None,
     ) -> None:
         self.threshold = threshold
         self.window = window
@@ -55,24 +42,20 @@ class CircuitBreaker:
         self._failures: list[float] = []
         self._lock = asyncio.Lock()
         self._open_until: float = 0.0
-        self._on_open = on_open  # async callback when circuit opens
+        self._on_open = on_open
 
     async def record_failure(self) -> None:
-        """Record a failure and open the circuit if threshold crossed."""
         async with self._lock:
             now = time.time()
             self._failures.append(now)
-            # Purge old failures
             self._failures = [t for t in self._failures if now - t < self.window]
             if len(self._failures) >= self.threshold:
                 self._open_until = now + self.cooldown
                 if self._on_open:
-                    # fire-and-forget (don't await inside lock)
                     import asyncio as _asyncio
                     _asyncio.ensure_future(self._on_open())
 
     async def wait_if_open(self) -> None:
-        """Block until the circuit closes."""
         now = time.time()
         if now < self._open_until:
             wait = self._open_until - now
@@ -81,12 +64,10 @@ class CircuitBreaker:
 
 
 # ---------------------------------------------------------------------------
-# ErrorAggregator – batch error counting
+# ErrorAggregator
 # ---------------------------------------------------------------------------
 
 class ErrorAggregator:
-    """Aggregates error counts instead of spamming logs."""
-
     def __init__(
         self,
         flush_interval: float = 30.0,
@@ -115,26 +96,18 @@ class ErrorAggregator:
 
 
 # ---------------------------------------------------------------------------
-# Checker – the core async checking loop
+# Checker
 # ---------------------------------------------------------------------------
 
 from config import ENDPOINT
 
 
 class Checker:
-    """Async username checker with keep-alive sessions and retry loop.
+    """Async username checker with latency tracking and fast fallback."""
 
-    Key behaviour:
-    - Rotating proxy: retries until Discord gives a definitive answer.
-      Connection errors get progressive backoff + circuit breaker.
-      The only hard stop is Discord returning 200/201/204/400.
-    - Static proxy list: cooldowns, 20 retries, 120 s total timeout.
-    - Scraped free proxies: one shot per proxy, no retry.
-    """
-
-    MAX_RETRIES = 20                # hard cap for static list
-    MAX_RETRIES_ROTATING = 100      # generous cap for rotating (should never hit)
-    STATIC_TOTAL_TIMEOUT = 120.0    # total timeout for static list
+    MAX_RETRIES = 15
+    MAX_RETRIES_ROTATING = 100
+    STATIC_TOTAL_TIMEOUT = 90.0
 
     def __init__(
         self,
@@ -142,7 +115,7 @@ class Checker:
         timeout: int = 10,
         scraped: bool = False,
         circuit_breaker: CircuitBreaker | None = None,
-        stats = None,
+        stats=None,
     ) -> None:
         self.pm = proxy_manager
         self.timeout = timeout
@@ -150,7 +123,7 @@ class Checker:
         self._rotating = proxy_manager.is_single
         self._scraped = scraped
         self._cb = circuit_breaker
-        self._stats = stats  # Stats object for live counters
+        self._stats = stats
 
         if scraped:
             self._max_retries = 1
@@ -167,10 +140,10 @@ class Checker:
         """Check a single username.
 
         Returns:
-            (True, data, code)  – available
-            (False, data, code) – taken or invalid
-            ("EXHAUSTED", None, None) – all proxies dead
-            ("ERROR", None, None) – max retries exceeded
+            (True, data, code)  - available
+            (False, data, code) - taken or invalid
+            ("EXHAUSTED", None, None) - all proxies dead
+            ("ERROR", None, None) - max retries exceeded
         """
         attempt = 0
         started = time.time()
@@ -184,25 +157,24 @@ class Checker:
             if attempt > self._max_retries:
                 return ("ERROR", None, None)
 
-            # Total timeout — static proxy list only
             if not self._rotating and time.time() - started > self.STATIC_TOTAL_TIMEOUT:
                 return ("ERROR", None, None)
 
-            # Count every HTTP attempt (including 429 retries) for RPS
             if self._stats:
                 await self._stats.inc_requests()
 
+            req_start = time.time()
+
             try:
-                # ── per-request timeout ──
                 if self._scraped:
-                    _timeout = aiohttp.ClientTimeout(total=5, sock_connect=5)
+                    _timeout = aiohttp.ClientTimeout(total=5, sock_connect=4)
                 elif self._rotating:
                     _timeout = aiohttp.ClientTimeout(
-                        total=min(self.timeout, 5), sock_connect=5,
+                        total=min(self.timeout, 5), sock_connect=4,
                     )
                 else:
                     _timeout = aiohttp.ClientTimeout(
-                        total=self.timeout, sock_connect=8,
+                        total=self.timeout, sock_connect=6,
                     )
 
                 async with session.post(
@@ -212,9 +184,13 @@ class Checker:
                     headers={"Content-Type": "application/json"},
                     timeout=_timeout,
                 ) as resp:
-                    dbg(f"  [{attempt}] {username} → HTTP {resp.status}")
+                    latency = time.time() - req_start
+                    # record latency for speed-based proxy selection
+                    if proxy and self._scraped:
+                        self.pm.record_latency(proxy, latency)
 
-                    # ── 429 Rate Limited ──
+                    dbg(f"  [{attempt}] {username} -> HTTP {resp.status}")
+
                     if resp.status == 429:
                         try:
                             data = await resp.json()
@@ -230,7 +206,6 @@ class Checker:
                             continue
 
                         if self._rotating:
-                            # Fresh IP on next request — no point waiting
                             if self._stats:
                                 await self._stats.inc_ratelimited()
                             continue
@@ -244,7 +219,6 @@ class Checker:
                             await asyncio.sleep(cooldown)
                         continue
 
-                    # ── Success (taken/available) ──
                     if resp.status in (200, 201, 204):
                         try:
                             data = await resp.json()
@@ -255,7 +229,6 @@ class Checker:
                             self.pm.score_hit(proxy)
                         return (not taken, data, resp.status)
 
-                    # ── Invalid username (Discord says so) ──
                     if resp.status == 400:
                         try:
                             data = await resp.json()
@@ -263,9 +236,9 @@ class Checker:
                             data = {}
                         return (False, data, resp.status)
 
-                    # ── Unknown status – brief wait, retry ──
+                    # unknown status - short retry
                     await self._err.inc(f"http_{resp.status}")
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(0.3)
                     continue
 
             except (
@@ -273,54 +246,46 @@ class Checker:
                 asyncio.TimeoutError,
                 OSError,
             ) as exc:
-                dbg(f"  [{attempt}] {username} → {type(exc).__name__}")
+                dbg(f"  [{attempt}] {username} -> {type(exc).__name__}")
 
-                # ── Scraped free proxies: one-shot ──
                 if self._scraped:
                     if proxy:
                         self.pm.score_miss(proxy)
                     continue
 
-                # ── Rotating proxy: progressive backoff + circuit breaker ──
                 if self._rotating:
                     if self._cb:
                         await self._cb.record_failure()
                         await self._cb.wait_if_open()
-                    # Per-worker progressive backoff
-                    backoff = min(attempt * 0.25, 3.0)
+                    backoff = min(attempt * 0.2, 2.0)
                     await asyncio.sleep(backoff)
                     continue
 
-                # ── Static proxy list: cooldown + backoff ──
                 await self._err.inc("proxy_conn_err")
-                await self.pm.set_cooldown(proxy, 3)
-                backoff = min(attempt * 0.15, 5.0)
+                await self.pm.set_cooldown(proxy, 2)
+                backoff = min(attempt * 0.1, 3.0)
                 await asyncio.sleep(backoff)
                 continue
 
             except Exception as exc:
-                dbg(f"  [{attempt}] {username} → {type(exc).__name__}: {exc!s:.100}")
-                await asyncio.sleep(0.3)
+                dbg(f"  [{attempt}] {username} -> {type(exc).__name__}: {exc!s:.100}")
+                await asyncio.sleep(0.2)
                 continue
 
 
 # ---------------------------------------------------------------------------
-# WebhookSender – async webhook dispatcher
+# WebhookSender
 # ---------------------------------------------------------------------------
 
 from config import Stats
 
 
 class WebhookSender:
-    """Sends found usernames to Discord webhook in batches to avoid rate-limits.
+    """Sends found usernames to Discord webhook in batches with stats."""
 
-    Discord webhook limit: 5 requests / 2 seconds, 2000 chars / message.
-    Strategy: accumulate hits, flush batch every 3s or when 15 names / 1800 chars.
-    """
-
-    DISCORD_MAX_CHARS = 1950  # leave 50 char margin
-    BATCH_SIZE = 15
-    FLUSH_INTERVAL = 3.0  # seconds
+    DISCORD_MAX_CHARS = 1900
+    BATCH_SIZE = 20
+    FLUSH_INTERVAL = 2.5
 
     def __init__(
         self,
@@ -337,22 +302,20 @@ class WebhookSender:
         self._queue: asyncio.Queue[str] = asyncio.Queue()
         self._buffer: list[str] = []
         self._buffer_lock = asyncio.Lock()
+        self._total_sent = 0
 
     def enqueue(self, username: str) -> None:
-        """Called by workers when a hit is found."""
         if username not in self._sent:
             self._sent.add(username)
             self._queue.put_nowait(username)
 
     async def run(self) -> None:
-        """Background task: accumulate hits, flush in batches."""
         last_flush = time.time()
 
         while True:
             try:
                 username = await asyncio.wait_for(self._queue.get(), timeout=1.0)
             except asyncio.TimeoutError:
-                # Timeout – flush if buffer has items and enough time passed
                 async with self._buffer_lock:
                     if self._buffer and time.time() - last_flush >= self.FLUSH_INTERVAL:
                         await self._flush_locked()
@@ -363,7 +326,6 @@ class WebhookSender:
                 self._buffer.append(username)
                 count = len(self._buffer)
 
-                # Build preview to check message length
                 hit_lines = [self.template.replace("<name>", n) for n in self._buffer]
                 preview = "\n".join(hit_lines)
 
@@ -378,17 +340,17 @@ class WebhookSender:
                     last_flush = time.time()
 
     async def _flush_locked(self) -> None:
-        """Send buffered hits. Must be called with _buffer_lock held."""
         if not self._buffer:
             return
 
         names = list(self._buffer)
         self._buffer.clear()
 
-        # Build message – resolve placeholders, truncate at newline boundary
         now = time.time()
         elapsed = int(now - self.start_time)
         ts_discord = f"<t:{int(now)}:R>"
+        mins, secs = divmod(elapsed, 60)
+        elapsed_str = f"{mins}m {secs}s" if mins else f"{secs}s"
 
         def _fill(n: str) -> str:
             return (
@@ -396,13 +358,12 @@ class WebhookSender:
                 .replace("<name>", n)
                 .replace("<t:time:R>", ts_discord)
                 .replace("<time>", ts_discord)
-                .replace("<elapsed>", str(elapsed))
+                .replace("<elapsed>", elapsed_str)
             )
 
         lines = [_fill(n) for n in names]
         msg = "\n".join(lines)
         if len(msg) > self.DISCORD_MAX_CHARS:
-            # Truncate at last complete line to avoid cutting a name mid-word
             safe = msg[: self.DISCORD_MAX_CHARS - 3]
             last_nl = safe.rfind("\n")
             if last_nl > 0:
@@ -410,13 +371,14 @@ class WebhookSender:
             else:
                 msg = safe + "..."
 
+        self._total_sent += len(names)
+
         payload = {
             "content": msg,
-            "username": "CloudChecker",
+            "username": "KLATOM",
             "avatar_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/95/Burning_Yellow_Sunset.jpg/1280px-Burning_Yellow_Sunset.jpg",
         }
 
-        # Send with retry on 429
         for attempt in range(3):
             try:
                 async with self.session.post(self.url, json=payload) as resp:
@@ -430,7 +392,6 @@ class WebhookSender:
                         continue
                     if resp.status in (200, 204):
                         return
-                    # Other error – give up
                     return
             except Exception:
                 await asyncio.sleep(1)

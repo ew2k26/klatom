@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CloudChecker v3.1 – Proxy manager with rotation, cooldowns, and scoring."""
+"""KLATOM v3.2 - Proxy manager with rotation, cooldowns, scoring, and speed testing."""
 
 from __future__ import annotations
 
@@ -14,18 +14,13 @@ import aiohttp
 
 from config import ENDPOINT
 
-# Quick proxy-URL sanity check (same logic as wizard._PROXY_RE)
 _VALID_PROXY = re.compile(
     r"^https?://(?:[^@\s]+@)?[a-zA-Z0-9](?:[a-zA-Z0-9\-.]*[a-zA-Z0-9])?:\d{1,5}$"
 )
 
 
 class ProxyManager:
-    """Manages proxy rotation with per-proxy ratelimit cooldowns.
-
-    For a single proxy (rotating gateway) every request gets a fresh
-    IP from the pool — the proxy itself is never marked dead.
-    """
+    """Manages proxy rotation with per-proxy ratelimit cooldowns, scoring, and speed testing."""
 
     def __init__(
         self,
@@ -42,10 +37,13 @@ class ProxyManager:
         self.remove_on_fail = remove_on_fail
         self._lock = asyncio.Lock()
 
-        # ── scoring (scraped free proxies only) ──
+        # scoring (scraped free proxies only)
         self._scored = scored
         self._scores: dict[str, int] = {}
         self._rate_limited_until: dict[str, float] = {}
+        # latency tracking: proxy -> avg latency in seconds
+        self._latencies: dict[str, float] = {}
+        self._latency_count: dict[str, int] = {}
         if scored:
             for raw in self._proxies:
                 if raw and raw.strip():
@@ -60,19 +58,29 @@ class ProxyManager:
 
     @property
     def is_single(self) -> bool:
-        """True if exactly one proxy (rotating gateway)."""
         return len(self._proxies) == 1 and not self._proxyless
 
     @property
     def alive_count(self) -> int:
-        """Number of proxies that are not dead (for display)."""
         if self.is_single:
-            return 1  # rotating gateway is always "alive"
+            return 1
+        if self._scored:
+            return sum(1 for k, v in self._scores.items() if v > 0 and k not in self._dead)
         return max(0, len(self._proxies) - len(self._dead))
 
     @property
     def total_count(self) -> int:
         return len(self._proxies)
+
+    @property
+    def dead_count(self) -> int:
+        return len(self._dead)
+
+    @property
+    def avg_latency(self) -> float:
+        if not self._latencies:
+            return 0.0
+        return sum(self._latencies.values()) / len(self._latencies)
 
     # ── Formatting ──
 
@@ -86,21 +94,13 @@ class ProxyManager:
     # ── Core: next proxy ──
 
     async def next(self) -> str | None:
-        """Return the next ready proxy.
-
-        - Proxyless → None (valid).
-        - Rotating gateway → always returns the proxy immediately.
-        - Static list → skips dead & cooldown proxies, waits if all busy.
-        - Scored (free) → weighted random pick from live proxies.
-        """
         if self._proxyless:
             return None
 
-        # Rotating gateway – never block
         if self.is_single:
             return self._format(self._proxies[0])
 
-        # Scored path (scraped free proxies) – weighted random
+        # Scored path (scraped free proxies) – weighted random with latency preference
         if self._scored:
             while True:
                 async with self._lock:
@@ -114,7 +114,15 @@ class ProxyManager:
                     if not live:
                         return None
                     keys = list(live.keys())
-                    weights = [live[k] for k in keys]
+                    # prefer low-latency proxies
+                    weights = []
+                    for k in keys:
+                        w = live[k]
+                        lat = self._latencies.get(k)
+                        if lat is not None and lat > 0:
+                            # faster proxies get higher weight
+                            w = max(1, int(w * (1.0 / max(lat, 0.1))))
+                        weights.append(w)
                     total_w = sum(weights)
                     pick = random.uniform(0, total_w) if total_w > 0 else 0
                     acc = 0
@@ -140,7 +148,6 @@ class ProxyManager:
                         continue
                     return proxy
 
-                # All proxies are in cooldown — wait for the earliest one
                 now = time.time()
                 earliest = min(
                     (v for v in self._cooldowns.values() if v > now),
@@ -150,10 +157,26 @@ class ProxyManager:
 
             await asyncio.sleep(wait)
 
-    # ── Scoring API (called by Checker for scraped proxies) ──
+    # ── Latency tracking ──
+
+    def record_latency(self, proxy: str | None, latency: float) -> None:
+        if not proxy:
+            return
+        key = proxy
+        if key in self._scores or not self._scored:
+            count = self._latency_count.get(key, 0)
+            old = self._latencies.get(key, 0.0)
+            # exponential moving average
+            if count == 0:
+                self._latencies[key] = latency
+            else:
+                alpha = 0.3
+                self._latencies[key] = old * (1 - alpha) + latency * alpha
+            self._latency_count[key] = count + 1
+
+    # ── Scoring API ──
 
     def score_hit(self, proxy: str | None) -> None:
-        """+5 points for a working proxy."""
         if not self._scored or not proxy:
             return
         key = proxy
@@ -161,7 +184,6 @@ class ProxyManager:
             self._scores[key] = min(self._scores[key] + 5, 100)
 
     def set_rate_limit(self, proxy: str | None, seconds: float) -> None:
-        """Mark proxy as rate-limited until *now + seconds*."""
         if not self._scored or not proxy:
             return
         key = proxy
@@ -169,7 +191,6 @@ class ProxyManager:
             self._rate_limited_until[key] = time.time() + seconds
 
     def score_miss(self, proxy: str | None) -> None:
-        """-1 point for a failed proxy.  Score ≤ 0 → removed."""
         if not self._scored or not proxy:
             return
         key = proxy
@@ -178,6 +199,8 @@ class ProxyManager:
             if self._scores[key] <= 0:
                 self._dead.add(key)
                 del self._scores[key]
+                self._latencies.pop(key, None)
+                self._latency_count.pop(key, None)
 
     async def mark_dead(self, proxy: str | None) -> None:
         if not self.remove_on_fail or proxy is None:
@@ -191,7 +214,100 @@ class ProxyManager:
         async with self._lock:
             self._cooldowns[proxy] = time.time() + seconds
 
-    # ── Validation (for testing proxies) ──
+    # ── Speed test ──
+
+    async def speed_test(
+        self,
+        concurrency: int = 200,
+        timeout: float = 8.0,
+        on_progress=None,
+    ) -> list[tuple[str, float, bool]]:
+        """Test all proxies for latency and availability.
+
+        Returns list of (proxy, latency_ms, is_working) sorted by latency.
+        Calls on_progress(tested, total, working) periodically.
+        """
+        sem = asyncio.Semaphore(concurrency)
+        results: list[tuple[str, float, bool]] = []
+        tested = [0]
+        working_count = [0]
+        lock = asyncio.Lock()
+
+        async def _test_one(proxy_raw: str | None) -> None:
+            proxy = self._format(proxy_raw) if proxy_raw else None
+            if proxy and not _VALID_PROXY.match(proxy):
+                async with lock:
+                    tested[0] += 1
+                    results.append((proxy or "", 99999.0, False))
+                    if on_progress and tested[0] % 50 == 0:
+                        await on_progress(tested[0], len(self._proxies), working_count[0])
+                return
+
+            start = time.time()
+            is_ok = False
+            try:
+                async with aiohttp.ClientSession(
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                    trust_env=False,
+                ) as sess:
+                    async with sess.post(
+                        ENDPOINT,
+                        json={"username": "a"},
+                        proxy=proxy,
+                        headers={"Content-Type": "application/json"},
+                    ) as resp:
+                        is_ok = resp.status in (200, 201, 204)
+            except Exception:
+                pass
+
+            latency_ms = (time.time() - start) * 1000
+            async with lock:
+                tested[0] += 1
+                if is_ok:
+                    working_count[0] += 1
+                results.append((proxy or "", latency_ms, is_ok))
+                if on_progress and tested[0] % 50 == 0:
+                    await on_progress(tested[0], len(self._proxies), working_count[0])
+
+        tasks = [_test_one(p) for p in self._proxies]
+        await asyncio.gather(*tasks)
+
+        # sort: working first by latency, then dead
+        results.sort(key=lambda x: (not x[2], x[1]))
+
+        # update internal latency data for working proxies
+        for proxy, latency_ms, is_ok in results:
+            if is_ok and latency_ms < 99999:
+                self._latencies[proxy] = latency_ms / 1000.0
+                self._latency_count[proxy] = 1
+
+        if on_progress:
+            await on_progress(len(self._proxies), len(self._proxies), working_count[0])
+
+        return results
+
+    async def apply_speed_results(self, results: list[tuple[str, float, bool]], remove_slow: bool = True, max_latency_ms: float = 3000.0) -> int:
+        """Apply speed test results. Removes dead/slow proxies. Returns count of working proxies."""
+        async with self._lock:
+            working = 0
+            for proxy, latency_ms, is_ok in results:
+                if not is_ok or latency_ms >= 99999:
+                    self._dead.add(proxy)
+                    self._scores.pop(proxy, None)
+                    self._latencies.pop(proxy, None)
+                    self._latency_count.pop(proxy, None)
+                elif remove_slow and latency_ms > max_latency_ms:
+                    self._dead.add(proxy)
+                    self._scores.pop(proxy, None)
+                else:
+                    working += 1
+                    if proxy in self._scores:
+                        # boost score for fast proxies
+                        speed_bonus = max(1, int(5 * (1.0 - latency_ms / max_latency_ms)))
+                        self._scores[proxy] = min(self._scores[proxy] + speed_bonus, 100)
+            return working
+
+    # ── Validation ──
 
     async def validate(
         self,
@@ -199,16 +315,8 @@ class ProxyManager:
         concurrency: int = 200,
         sample: int | None = None,
     ) -> tuple[int, int]:
-        """Test proxies concurrently. Returns (working, total).
-
-        - *timeout* per-proxy (default 15 s).
-        - *concurrency* limits parallel tests via semaphore.
-        - *sample*: number of proxies to test (None → all).
-        """
-
         async def _test_one(proxy_raw: str | None) -> bool:
             proxy = self._format(proxy_raw) if proxy_raw else None
-            # Skip obviously malformed URLs before aiohttp prints warnings
             if proxy and not _VALID_PROXY.match(proxy):
                 return False
             try:

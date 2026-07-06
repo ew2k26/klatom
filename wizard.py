@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CloudChecker v3.1 – Setup wizard and proxy scraper."""
+"""KLATOM v3.2 - Setup wizard and proxy scraper."""
 
 from __future__ import annotations
 
@@ -38,36 +38,23 @@ from ui import (
     ok,
     progress_steps,
     section,
+    speed_test_result,
     warn_card,
 )
 
-# Default file paths (absolute, under DATA_DIR)
 DEFAULT_PROXY_FILE = str(DATA_DIR / "proxies.txt")
 DEFAULT_NAMES_FILE = str(DATA_DIR / "names_to_check.txt")
 
-# Clean display versions (shown in prompts, not full absolute paths)
 _PROXY_FILE_DISPLAY = "data/proxies.txt"
 _NAMES_FILE_DISPLAY = "data/names_to_check.txt"
 
 
 def _resolve_input_path(raw: str) -> str:
-    """Resolve user input to an absolute path.
-
-    If *raw* is relative it is resolved against PROJECT_ROOT so the
-    script works regardless of the current working directory.
-    """
     p = Path(raw).expanduser()
     if not p.is_absolute():
         p = PROJECT_ROOT / p
     return str(p)
 
-# Regex: matches host:port with optional http:// and optional user:pass@
-#   "1.2.3.4:8080"                                 ✓
-#   "http://1.2.3.4:8080"                           ✓
-#   "user:pass@1.2.3.4:8080"                         ✓
-#   "http://user:pass@1.2.3.4:8080"                  ✓
-#   "domain.com:8080"                                ✓
-#   '"ip":"1.2.3.4"' (JSON cruft from geonode)       ✗
 _PROXY_RE = re.compile(
     r"^(?:https?://)?(?:[^@\s]+@)?[a-zA-Z0-9](?:[a-zA-Z0-9\-.]*[a-zA-Z0-9])?:\d{1,5}$"
 )
@@ -78,14 +65,12 @@ _PROXY_RE = re.compile(
 # ---------------------------------------------------------------------------
 
 async def setup_wizard(config: Config, settings: AppSettings) -> RunConfig:
-    """Walk the user through a clean 4-step setup."""
-
     console.clear()
     console.print(banner())
     console.print()
     console.print(progress_steps(0))
 
-    # ── Step 1: Proxies ──
+    # Step 1: Proxies
     warn_card(
         f"[{C.WARNING}]Proxies strongly recommended[/]",
         f"[{C.MUTED}]Without them Discord will rate-limit you.[/]",
@@ -93,26 +78,35 @@ async def setup_wizard(config: Config, settings: AppSettings) -> RunConfig:
     )
     proxies, remove_bad, scraped = await _step_proxies(config)
 
-    # ── Step 2: Usernames ──
+    # Step 2: Speed test (scraped only)
     console.print()
     console.print(progress_steps(1))
-    usernames = _step_usernames()
+    working_proxies = 0
+    if scraped and len(proxies) > 10:
+        working_proxies = await _step_speed_test(proxies, config)
+    elif scraped:
+        ok(f"{len(proxies)} proxies loaded (too few for speed test)")
 
-    # ── Step 3: Speed ──
+    # Step 3: Usernames
     console.print()
     console.print(progress_steps(2))
-    concurrency, timeout = _step_speed(proxies, scraped)
+    usernames = _step_usernames()
 
-    # ── Step 4: Webhook ──
+    # Step 4: Speed settings
     console.print()
     console.print(progress_steps(3))
+    concurrency, timeout = _step_speed(proxies, scraped)
+
+    # Step 5: Webhook
+    console.print()
+    console.print(progress_steps(4))
     webhook_url, webhook_msg = _step_webhook(config)
 
     config.set("timeout", timeout)
     config.set("concurrency", concurrency)
     config.set("remove_proxies", remove_bad)
 
-    # ── Summary ──
+    # Summary
     config_summary(
         proxy_count=len(proxies),
         scraped=scraped,
@@ -121,6 +115,7 @@ async def setup_wizard(config: Config, settings: AppSettings) -> RunConfig:
         concurrency=concurrency,
         timeout=timeout,
         webhook=bool(webhook_url),
+        working_proxies=working_proxies,
     )
 
     if not Confirm.ask(f"\n[{C.PRIMARY}]Start checking?[/]", default=True):
@@ -144,14 +139,12 @@ async def setup_wizard(config: Config, settings: AppSettings) -> RunConfig:
 # ---------------------------------------------------------------------------
 
 async def _step_proxies(config: Config) -> tuple[list[str], bool, bool]:
-    """Guide user through proxy setup. Returns (proxies, remove_bad, scraped)."""
     proxies: list[str] = []
     remove_bad = False
     scraped = False
 
-    # Check for proxies from last session
     existing = load_lines(DEFAULT_PROXY_FILE)
-    reuse_cfg = config.get("reuse_proxies")  # None=ask, True=auto, False=skip
+    reuse_cfg = config.get("reuse_proxies")
 
     if existing and reuse_cfg is None:
         console.print()
@@ -169,7 +162,6 @@ async def _step_proxies(config: Config) -> tuple[list[str], bool, bool]:
         ok(f"Auto-reusing {len(proxies)} proxies")
 
     if not proxies:
-        # Present all proxy sources as first-class options
         console.print()
         mode = Prompt.ask(
             f"[{C.PRIMARY}]Proxy source:[/] (f)ile  (p)aste  (s)crape  (n)one",
@@ -203,13 +195,11 @@ async def _step_proxies(config: Config) -> tuple[list[str], bool, bool]:
             if scraped_proxies:
                 proxies = scraped_proxies
                 scraped = True
-        # mode "n" -> proxies stays empty (proxyless)
 
     if proxies:
         tag = f" [{C.MUTED}](free)[/]" if scraped else ""
         ok(f"{len(proxies)} proxies loaded{tag}")
 
-        # Always ask about removing dead proxies (scraped or file)
         if len(proxies) > 1:
             remove_bad = Confirm.ask(
                 "Auto-remove dead proxies?", default=True
@@ -223,14 +213,57 @@ async def _step_proxies(config: Config) -> tuple[list[str], bool, bool]:
     return proxies, remove_bad, scraped
 
 
+# ---------------------------------------------------------------------------
+# Step 2: Speed Test
+# ---------------------------------------------------------------------------
+
+async def _step_speed_test(proxies: list[str], config: Config) -> int:
+    """Speed test scraped proxies and remove dead/slow ones."""
+    from proxy import ProxyManager
+
+    if not Confirm.ask(f"Speed test {len(proxies)} proxies?", default=True):
+        ok("Skipping speed test")
+        return 0
+
+    pm = ProxyManager(proxies, remove_on_fail=True, scored=True)
+
+    console.print()
+    console.print(f"[{C.PRIMARY}]Testing {len(proxies)} proxies...[/]")
+    console.print()
+
+    def _on_progress(tested, total, working):
+        pct = tested / max(total, 1) * 100
+        console.print(f"\r  [{C.PRIMARY}]Testing[/] {tested}/{total} ({pct:.0f}%) - [{C.SUCCESS}]{working}[/] working", end="")
+
+    results = await pm.speed_test(
+        concurrency=200,
+        timeout=8.0,
+        on_progress=_on_progress,
+    )
+    console.print()
+
+    working = await pm.apply_speed_results(results, remove_slow=True, max_latency_ms=3000)
+    speed_test_result(results)
+
+    if working == 0:
+        fail("No working proxies found. Try different sources.")
+        return 0
+
+    # Update the proxy file with only working proxies
+    working_proxies = [r[0] for r in results if r[2] and r[1] < 3000]
+    if working_proxies:
+        ensure_file(DEFAULT_PROXY_FILE)
+        Path(DEFAULT_PROXY_FILE).write_text("\n".join(working_proxies), encoding="utf-8")
+        ok(f"Saved {len(working_proxies)} fast proxies")
+
+    return working
+
 
 # ---------------------------------------------------------------------------
-# Step 2: Usernames
+# Step 3: Usernames
 # ---------------------------------------------------------------------------
-
 
 def _step_usernames() -> list[str]:
-    """Guide user through username list setup."""
     raw = Prompt.ask(
         f"[{C.PRIMARY}](f)ile[/] or [{C.PRIMARY}](g)enerate[/] usernames?",
         choices=["f", "g"],
@@ -253,7 +286,6 @@ def _step_usernames() -> list[str]:
         total = len(USERNAME_CHARS) ** length
 
         if length >= 5:
-            # Too many combos for itertools.product (79M for 5 chars)
             ok(f"Generating 50000 random {length}-char usernames (of {total:,} possible)...")
             seen: set[str] = set()
             usernames = []
@@ -275,11 +307,10 @@ def _step_usernames() -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Step 3: Speed
+# Step 4: Speed
 # ---------------------------------------------------------------------------
 
 def _step_speed(proxies: list[str], scraped: bool = False) -> tuple[int, int]:
-    """Guide user through concurrency and timeout settings."""
     if not proxies:
         info("Proxyless mode — 1 worker with delay.")
         delay = IntPrompt.ask("Delay between requests (seconds)", default=5)
@@ -287,7 +318,7 @@ def _step_speed(proxies: list[str], scraped: bool = False) -> tuple[int, int]:
 
     if scraped:
         info("Free proxy mode — high concurrency, short timeout.")
-        conc = IntPrompt.ask("Concurrent workers", default=50)
+        conc = IntPrompt.ask("Concurrent workers", default=100)
         if conc > MAX_CONCURRENCY:
             warn_card(f"Capped at {MAX_CONCURRENCY} — beyond this the program freezes.")
             conc = MAX_CONCURRENCY
@@ -304,13 +335,10 @@ def _step_speed(proxies: list[str], scraped: bool = False) -> tuple[int, int]:
 
 
 # ---------------------------------------------------------------------------
-# Step 4: Webhook
+# Step 5: Webhook
 # ---------------------------------------------------------------------------
 
 def _step_webhook(config: Config) -> tuple[str | None, str | None]:
-    """Guide user through optional webhook setup."""
-
-    # Already saved and set to always use
     saved_url = config.get("webhook")
     saved_msg = config.get("webhook_message", "**<name>** available | <t:time:R>")
     always = config.get("webhook_always", False)
@@ -319,7 +347,6 @@ def _step_webhook(config: Config) -> tuple[str | None, str | None]:
         ok(f"Using saved webhook")
         return saved_url, saved_msg
 
-    # Ask if they want webhook
     if saved_url and not always:
         if not Confirm.ask(
             f"Use webhook? [dim](saved from last session)[/]", default=True
@@ -345,7 +372,6 @@ def _step_webhook(config: Config) -> tuple[str | None, str | None]:
             default="**<name>** available | <t:time:R>",
         )
 
-    # Save & always-use
     config.set("webhook", webhook_url)
     config.set("webhook_message", webhook_msg)
 
@@ -361,8 +387,6 @@ def _step_webhook(config: Config) -> tuple[str | None, str | None]:
 # ---------------------------------------------------------------------------
 
 async def _scrape_proxies() -> list[str]:
-    """Fetch free HTTP proxies from multiple sources, deduplicate."""
-
     SOURCES = [
         ("TheSpeedX",           "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt"),
         ("monosans",            "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt"),
@@ -393,15 +417,15 @@ async def _scrape_proxies() -> list[str]:
             ) as sess:
                 async with sess.get(url) as resp:
                     if resp.status != 200:
-                        console.print(f"  [{C.DANGER}]✗[/] {name} HTTP {resp.status}")
+                        console.print(f"  [{C.DANGER}]x[/] {name} HTTP {resp.status}")
                         return []
                     text = await resp.text()
                     found = [p.strip() for p in text.splitlines()
                              if _PROXY_RE.match(p.strip())]
-                    console.print(f"  [{C.SUCCESS}]✓[/] {name} {len(found)} proxies")
+                    console.print(f"  [{C.SUCCESS}]+[/] {name} {len(found)} proxies")
                     return found
         except Exception as e:
-            console.print(f"  [{C.DANGER}]✗[/] {name} {e}")
+            console.print(f"  [{C.DANGER}]x[/] {name} {e}")
             return []
 
     tasks = [_fetch_one(name, url) for name, url in SOURCES]

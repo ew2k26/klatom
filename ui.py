@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KLATOM v3.1 - Terminal UI."""
+"""KLATOM v3.2 - Terminal UI."""
 
 from __future__ import annotations
 
@@ -32,8 +32,8 @@ def banner() -> Panel:
     )
 
 
-def progress_steps(current: int, total: int = 4) -> str:
-    steps = ["Proxies", "Usernames", "Speed", "Webhook"]
+def progress_steps(current: int, total: int = 5) -> str:
+    steps = ["Proxies", "Speed", "Usernames", "Speed", "Webhook"]
     parts: list[str] = []
     for i, label in enumerate(steps):
         if i < current:
@@ -79,6 +79,7 @@ def config_summary(
     concurrency: int,
     timeout: int,
     webhook: bool,
+    working_proxies: int = 0,
 ) -> None:
     console.print()
     t = Table(box=box.ROUNDED, border_style=C.BORDER, show_header=False, padding=(0, 2))
@@ -87,6 +88,8 @@ def config_summary(
 
     tag = f" [{C.MUTED}](free)[/]" if scraped else ""
     t.add_row("Proxies", f"[{C.PRIMARY}]{proxy_count}[/] loaded{tag}")
+    if working_proxies > 0 and scraped:
+        t.add_row("Working", f"[{C.SUCCESS}]{working_proxies}[/] alive")
     if proxy_count > 1 and not scraped:
         t.add_row("Auto-remove", "Yes" if remove_bad else "No")
     t.add_row("Usernames", str(username_count))
@@ -94,6 +97,44 @@ def config_summary(
     t.add_row("Timeout", f"{timeout}s")
     t.add_row("Webhook", f"[{C.SUCCESS}]on[/]" if webhook else f"[{C.MUTED}]off[/]")
     console.print(Panel(t, title="[bold]Config Summary[/]", title_align="left", box=box.ROUNDED, border_style=C.PRIMARY))
+
+
+def speed_test_progress(tested: int, total: int, working: int) -> None:
+    pct = tested / max(total, 1) * 100
+    console.print(f"\r  [{C.PRIMARY}]Testing proxies[/] {tested}/{total} ({pct:.0f}%) - [{C.SUCCESS}]{working}[/] working", end="")
+
+
+def speed_test_result(results: list[tuple[str, float, bool]]) -> None:
+    working = [r for r in results if r[2]]
+    dead = [r for r in results if not r[2]]
+
+    t = Table(box=box.ROUNDED, border_style=C.BORDER, show_header=False, padding=(0, 2))
+    t.add_column(style=C.MUTED, width=16)
+    t.add_column(style="white")
+
+    t.add_row("Total tested", str(len(results)))
+    t.add_row("Working", f"[{C.SUCCESS}]{len(working)}[/]")
+    t.add_row("Dead/Slow", f"[{C.DANGER}]{len(dead)}[/]")
+
+    if working:
+        latencies = [r[1] for r in working]
+        avg = sum(latencies) / len(latencies)
+        fast = [r for r in working if r[1] < 1000]
+        medium = [r for r in working if 1000 <= r[1] < 2000]
+        slow = [r for r in working if r[1] >= 2000]
+        t.add_row("Avg latency", f"{avg:.0f}ms")
+        t.add_row("Fast (<1s)", f"[{C.SUCCESS}]{len(fast)}[/]")
+        t.add_row("Medium (1-2s)", f"[{C.WARNING}]{len(medium)}[/]")
+        t.add_row("Slow (>2s)", f"[{C.DANGER}]{len(slow)}[/]")
+
+        # show top 5 fastest
+        top5 = sorted(working, key=lambda x: x[1])[:5]
+        if top5:
+            top_str = "  ".join(f"{r[0].split('://')[-1][:20]} [{C.SUCCESS}]{r[1]:.0f}ms[/]" for r in top5)
+            t.add_row("Fastest", top_str)
+
+    console.print()
+    console.print(Panel(t, title="[bold]Speed Test Results[/]", title_align="left", box=box.ROUNDED, border_style=C.SUCCESS))
 
 
 def live_card(
@@ -109,6 +150,8 @@ def live_card(
     proxy_alive: int,
     checks_rps: float = 0.0,
     paused: bool = False,
+    errors: int = 0,
+    avg_latency: float = 0.0,
     recent: list[str] | None = None,
     feed: list[str] | None = None,
 ) -> Panel:
@@ -130,7 +173,12 @@ def live_card(
         "Requests", str(requests),
     )
 
-    if ratelimited > 0:
+    if errors > 0:
+        inner.add_row(
+            f"[{C.WARNING}]Errors[/]", f"[{C.WARNING}]{errors}[/]",
+            "Elapsed", f"{elapsed:.0f}s",
+        )
+    elif ratelimited > 0:
         inner.add_row(
             f"[{C.WARNING}]Rate limited[/]", f"[{C.WARNING}]{ratelimited}[/]",
             "Elapsed", f"{elapsed:.0f}s",
@@ -145,6 +193,11 @@ def live_card(
         inner.add_row(
             f"[{C.WARNING}]Circuit breaks[/]", f"[{C.WARNING}]{circuit_opens}[/]",
             "Proxies", f"{proxy_alive} alive",
+        )
+    elif avg_latency > 0:
+        inner.add_row(
+            "Proxies", f"{proxy_alive} alive",
+            "Avg latency", f"{avg_latency:.0f}ms",
         )
     else:
         inner.add_row(
@@ -176,7 +229,9 @@ def live_card(
 
     if feed:
         content.add_section()
-        feed_str = "  ".join(feed[-8:])
+        # filter feed to show last meaningful entries, skip excessive ? marks
+        display_feed = feed[-12:]
+        feed_str = "  ".join(display_feed)
         content.add_row(Text.from_markup(feed_str))
 
     status = f"waiting" if (ratelimited > 0 and done == 0) else f"{done}/{total} ({pct:.0f}%)"
@@ -199,6 +254,7 @@ def final_summary(
     elapsed: float,
     peak_rps: float = 0.0,
     best_streak: int = 0,
+    errors: int = 0,
 ) -> None:
     console.print()
 
@@ -212,6 +268,8 @@ def final_summary(
     t.add_row("Requests", str(requests))
     if ratelimited > 0:
         t.add_row("Rate limited", f"[{C.WARNING}]{ratelimited}[/]")
+    if errors > 0:
+        t.add_row("Errors", f"[{C.DANGER}]{errors}[/]")
     if circuit_opens > 0:
         t.add_row("Circuit breaks", str(circuit_opens))
     t.add_row("Elapsed", f"{elapsed:.0f}s")

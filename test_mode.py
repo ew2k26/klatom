@@ -40,7 +40,7 @@ class C:
     WARNING = "#FF9F0A"
     MUTED = "#7A7A82"
 
-VERSION = "3.1.0"
+VERSION = "3.2.0"
 
 
 console = Console()

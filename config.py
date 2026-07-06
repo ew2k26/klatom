@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Klatom v3.1 - Configuration, constants, helpers, and data models."""
+"""KLATOM v3.2 - Configuration, constants, helpers, and data models."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ DATA_DIR = APPDATA_DIR / "data"
 LOGS_DIR = APPDATA_DIR / "logs"
 RESULTS_DIR = APPDATA_DIR / "results"
 
-VERSION = "3.1.0"
+VERSION = "3.2.0"
 ENDPOINT = "https://discord.com/api/v9/unique-username/username-attempt-unauthed"
 USERNAME_CHARS = string.ascii_lowercase + string.digits + "_" + "."
 MAX_CONCURRENCY = 2000
@@ -127,6 +127,7 @@ class Stats:
     works: int = 0
     taken: int = 0
     ratelimited: int = 0
+    errors: int = 0
     circuit_opens: int = 0
     rps: float = 0.0
     checks_rps: float = 0.0
@@ -159,6 +160,10 @@ class Stats:
         async with self._lock:
             self.ratelimited += 1
 
+    async def inc_errors(self) -> None:
+        async with self._lock:
+            self.errors += 1
+
     async def inc_circuit_open(self) -> None:
         async with self._lock:
             self.circuit_opens += 1
@@ -180,6 +185,7 @@ class Stats:
                 "works": self.works,
                 "taken": self.taken,
                 "ratelimited": self.ratelimited,
+                "errors": self.errors,
                 "circuit_opens": self.circuit_opens,
                 "rps": self.rps,
                 "checks_rps": self.checks_rps,
