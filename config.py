@@ -27,11 +27,13 @@ MAX_CONCURRENCY = 2000
 
 class C:
     PRIMARY   = "#A855F7"
+    PRIMARY_D = "#7C3AED"
     SUCCESS   = "#30D158"
     DANGER    = "#FF453A"
     WARNING   = "#FF9F0A"
-    MUTED     = "#98989D"
-    BORDER    = "#48484A"
+    MUTED     = "#7A7A82"
+    BORDER    = "#3A3A42"
+    BG        = "#1A1A22"
 
 
 def ensure_dir(*paths: str | Path) -> None:

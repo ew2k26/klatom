@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CloudChecker v3.1 – terminal UI."""
+"""KLATOM v3.1 - Terminal UI."""
 
 from __future__ import annotations
 
@@ -14,58 +14,44 @@ from config import C, VERSION
 
 console = Console()
 
-# ---------------------------------------------------------------------------
-# Banner
-# ---------------------------------------------------------------------------
 
 def banner() -> Panel:
-    """Banner."""
     inner = Text()
-    inner.append("CloudChecker", style=f"bold {C.PRIMARY}")
+    inner.append("K", style=f"bold {C.PRIMARY}")
+    inner.append("L", style=f"bold {C.PRIMARY}")
+    inner.append("A", style=f"bold {C.PRIMARY}")
+    inner.append("T", style=f"bold {C.PRIMARY}")
+    inner.append("O", style=f"bold {C.PRIMARY}")
+    inner.append("M", style=f"bold {C.PRIMARY}")
     inner.append(f"  v{VERSION}", style=f"{C.MUTED}")
     return Panel(
         inner,
         box=box.ROUNDED,
-        border_style=C.BORDER,
+        border_style=C.PRIMARY,
         padding=(1, 4),
     )
 
 
-# ---------------------------------------------------------------------------
-# Progress indicator
-# ---------------------------------------------------------------------------
-
 def progress_steps(current: int, total: int = 4) -> str:
-    """Render a step progress indicator: ● Proxies  ○ Usernames  ○ Speed  ○ Webhook"""
     steps = ["Proxies", "Usernames", "Speed", "Webhook"]
     parts: list[str] = []
     for i, label in enumerate(steps):
         if i < current:
-            parts.append(f"[{C.SUCCESS}]✓[/] {label}")
+            parts.append(f"[{C.SUCCESS}]{label}[/]")
         elif i == current:
-            parts.append(f"[{C.PRIMARY}]●[/] {label}")
+            parts.append(f"[{C.PRIMARY}]{label}[/]")
         else:
-            parts.append(f"[{C.MUTED}]○[/] {label}")
+            parts.append(f"[{C.MUTED}]{label}[/]")
     return "  ".join(parts)
 
 
-# ---------------------------------------------------------------------------
-# Section header
-# ---------------------------------------------------------------------------
-
 def section(title: str) -> None:
-    """Print a clean section header."""
     console.print()
     console.print(Text(title, style=f"bold {C.PRIMARY}"))
-    console.print("─" * 40, style=C.MUTED)
+    console.print("─" * 40, style=C.BORDER)
 
-
-# ---------------------------------------------------------------------------
-# Cards
-# ---------------------------------------------------------------------------
 
 def card(title: str | None, *lines: str, border: str = C.PRIMARY) -> None:
-    """Print a rounded-card panel."""
     body = "\n".join(lines) if lines else ""
     console.print(Panel(
         body,
@@ -78,18 +64,12 @@ def card(title: str | None, *lines: str, border: str = C.PRIMARY) -> None:
 
 
 def info_card(*lines: str) -> None:
-    """Print an informational card (muted border)."""
     card(None, *lines, border=C.MUTED)
 
 
 def warn_card(*lines: str) -> None:
-    """Print a warning card."""
     card(None, *lines, border=C.WARNING)
 
-
-# ---------------------------------------------------------------------------
-# Summary table (config)
-# ---------------------------------------------------------------------------
 
 def config_summary(
     proxy_count: int,
@@ -100,7 +80,6 @@ def config_summary(
     timeout: int,
     webhook: bool,
 ) -> None:
-    """Print a clean configuration summary."""
     console.print()
     t = Table(box=box.ROUNDED, border_style=C.BORDER, show_header=False, padding=(0, 2))
     t.add_column(style=C.MUTED, width=16)
@@ -114,12 +93,8 @@ def config_summary(
     t.add_row("Workers", str(concurrency))
     t.add_row("Timeout", f"{timeout}s")
     t.add_row("Webhook", f"[{C.SUCCESS}]on[/]" if webhook else f"[{C.MUTED}]off[/]")
-    console.print(Panel(t, title="Summary", title_align="left", box=box.ROUNDED, border_style=C.PRIMARY))
+    console.print(Panel(t, title="[bold]Config Summary[/]", title_align="left", box=box.ROUNDED, border_style=C.PRIMARY))
 
-
-# ---------------------------------------------------------------------------
-# Live checker card builder
-# ---------------------------------------------------------------------------
 
 def live_card(
     done: int,
@@ -137,7 +112,6 @@ def live_card(
     recent: list[str] | None = None,
     feed: list[str] | None = None,
 ) -> Panel:
-    """Build the live display panel for the checker runner."""
 
     pct = done / max(total, 1) * 100
 
@@ -156,7 +130,6 @@ def live_card(
         "Requests", str(requests),
     )
 
-    # Rate-limited row
     if ratelimited > 0:
         inner.add_row(
             f"[{C.WARNING}]Rate limited[/]", f"[{C.WARNING}]{ratelimited}[/]",
@@ -168,7 +141,6 @@ def live_card(
             "Elapsed", f"{elapsed:.0f}s",
         )
 
-    # Circuit breaker / paused
     if circuit_opens > 0 or paused:
         inner.add_row(
             f"[{C.WARNING}]Circuit breaks[/]", f"[{C.WARNING}]{circuit_opens}[/]",
@@ -183,47 +155,40 @@ def live_card(
     content = Table(box=None, show_header=False, padding=(0, 0), expand=True)
     content.add_row(inner)
 
-    # Status banner for heavy rate-limiting
     if ratelimited > 0 and (done == 0 or ratelimited > done * 2):
         content.add_section()
         content.add_row(Text(
-            f"⚠ Discord is rate-limiting — {ratelimited} requests blocked. Workers are alive, just waiting.",
+            f"[!] Discord is rate-limiting - {ratelimited} requests blocked.",
             style=C.WARNING,
         ))
 
     if paused:
         content.add_section()
         content.add_row(Text(
-            f"⏸ Circuit breaker active — all workers paused briefly to protect the proxy.",
+            f"[!] Circuit breaker active - workers paused.",
             style=C.WARNING,
         ))
 
-    # Recent hits
     if recent:
         content.add_section()
         recent_str = "  ".join(f"[{C.SUCCESS}]{n}[/]" for n in recent[-6:])
         content.add_row(Text("Recent  ", style=C.MUTED) + Text.from_markup(recent_str))
 
-    # Live feed (only last 8 entries)
     if feed:
         content.add_section()
         feed_str = "  ".join(feed[-8:])
         content.add_row(Text.from_markup(feed_str))
 
-    status = f"⌛ rate-limited" if (ratelimited > 0 and done == 0) else f"{done}/{total} ({pct:.0f}%)"
+    status = f"waiting" if (ratelimited > 0 and done == 0) else f"{done}/{total} ({pct:.0f}%)"
     return Panel(
         content,
-        title=f"[{C.PRIMARY}]CloudChecker[/] · {status} · [dim]{elapsed:.0f}s[/]",
+        title=f"[{C.PRIMARY}]KLATOM[/] . {status} . [dim]{elapsed:.0f}s[/]",
         title_align="left",
         box=box.ROUNDED,
-        border_style=C.BORDER if not paused else C.WARNING,
+        border_style=C.PRIMARY if not paused else C.WARNING,
         padding=(1, 2),
     )
 
-
-# ---------------------------------------------------------------------------
-# Final summary
-# ---------------------------------------------------------------------------
 
 def final_summary(
     requests: int,
@@ -235,7 +200,6 @@ def final_summary(
     peak_rps: float = 0.0,
     best_streak: int = 0,
 ) -> None:
-    """Print the final results card."""
     console.print()
 
     avg_rps = requests / max(elapsed, 0.1)
@@ -261,22 +225,18 @@ def final_summary(
 
     console.print(Panel(
         t,
-        title=f"[{C.SUCCESS}]Done[/] · {elapsed:.0f}s",
+        title=f"[{C.SUCCESS}]Done[/] . {elapsed:.0f}s",
         title_align="left",
         box=box.ROUNDED,
         border_style=C.SUCCESS,
     ))
 
 
-# ---------------------------------------------------------------------------
-# Utility
-# ---------------------------------------------------------------------------
-
 def ok(msg: str) -> None:
-    console.print(f"  [{C.SUCCESS}]✓[/] {msg}")
+    console.print(f"  [{C.SUCCESS}]+[/] {msg}")
 
 def fail(msg: str) -> None:
-    console.print(f"  [{C.DANGER}]✗[/] {msg}")
+    console.print(f"  [{C.DANGER}]x[/] {msg}")
 
 def info(msg: str) -> None:
-    console.print(f"  [{C.MUTED}]ℹ[/] {msg}")
+    console.print(f"  [{C.MUTED}]~[/] {msg}")

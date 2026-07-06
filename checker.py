@@ -36,7 +36,7 @@ try:
     u = ctypes.windll.user32
     h = k.GetConsoleWindow()
     if h:
-        u.SetWindowTextW(h, "Klatom v3.1 - Discord Username Checker")
+        u.SetWindowTextW(h, "KLATOM v3.1 - Discord Username Checker")
 except Exception:
     pass
 

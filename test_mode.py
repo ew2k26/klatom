@@ -38,7 +38,9 @@ class C:
     SUCCESS = "#30D158"
     DANGER = "#FF453A"
     WARNING = "#FF9F0A"
-    MUTED = "#98989D"
+    MUTED = "#7A7A82"
+
+VERSION = "3.1.0"
 
 
 console = Console()
@@ -75,8 +77,8 @@ def _banner():
     inner.append("\n  ██╔═██╗ ██║     ██╔══██║██║╚██╗██║   ██║   ██║   ██║██║╚██╔╝██║", style=f"bold {C.PRIMARY}")
     inner.append("\n  ██║  ██╗███████╗██║  ██║██║ ╚████║   ██║   ╚██████╔╝██║ ╚═╝ ██║", style=f"bold {C.PRIMARY}")
     inner.append("\n  ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝    ╚═════╝ ╚═╝     ╚═╝", style=f"bold {C.PRIMARY}")
-    inner.append(f"\n\n  [bold {C.WARNING}]>>> TEST MODE <<<[/]", style=f"{C.WARNING}")
-    inner.append(f"\n         v2.1.1", style=f"{C.MUTED}")
+    inner.append(f"\n\n  [bold {C.WARNING}]MOD PANEL[/]", style=f"{C.WARNING}")
+    inner.append(f"\n         v{VERSION}", style=f"{C.MUTED}")
     return Panel(inner, box=box.DOUBLE, border_style=C.WARNING, padding=(0, 1))
 
 
