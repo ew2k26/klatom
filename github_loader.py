@@ -68,6 +68,33 @@ async def _fetch(filename: str) -> str | None:
     return None
 
 
+def _bundled_dir() -> Path | None:
+    """Return the path to repo_data bundled in the exe (via PyInstaller --add-data)."""
+    if getattr(__import__("sys"), "frozen", False):
+        import sys as _sys
+        base = Path(_sys._MEIPASS) if hasattr(_sys, "_MEIPASS") else None
+        if base:
+            bundled = base / "repo_data"
+            if bundled.is_dir():
+                return bundled
+    # When running from source, use repo_data next to this file
+    local = Path(__file__).resolve().parent / "repo_data"
+    if local.is_dir():
+        return local
+    return None
+
+
+def _load_bundled(filename: str) -> str | None:
+    """Load a file from the bundled repo_data directory."""
+    d = _bundled_dir()
+    if d is None:
+        return None
+    target = d / filename
+    if target.exists():
+        return target.read_text(encoding="utf-8")
+    return None
+
+
 async def fetch_names() -> list[str]:
     cache = _cache_dir() / "names.txt"
     content = await _fetch("names_to_check.txt")
@@ -77,7 +104,13 @@ async def fetch_names() -> list[str]:
             cache.write_text("\n".join(names), encoding="utf-8")
             return names
     if cache.exists():
-        return [l.strip() for l in cache.read_text(encoding="utf-8").splitlines() if l.strip()]
+        cached = [l.strip() for l in cache.read_text(encoding="utf-8").splitlines() if l.strip()]
+        if cached:
+            return cached
+    # Fallback to bundled files
+    bundled = _load_bundled("names_to_check.txt")
+    if bundled:
+        return [l.strip() for l in bundled.splitlines() if l.strip()]
     return []
 
 
@@ -90,7 +123,13 @@ async def fetch_proxies() -> list[str]:
             cache.write_text("\n".join(proxies), encoding="utf-8")
             return proxies
     if cache.exists():
-        return [l.strip() for l in cache.read_text(encoding="utf-8").splitlines() if l.strip()]
+        cached = [l.strip() for l in cache.read_text(encoding="utf-8").splitlines() if l.strip()]
+        if cached:
+            return cached
+    # Fallback to bundled files
+    bundled = _load_bundled("proxies.txt")
+    if bundled:
+        return [l.strip() for l in bundled.splitlines() if l.strip()]
     return []
 
 
@@ -107,6 +146,13 @@ async def fetch_config() -> dict:
     if cache.exists():
         try:
             return json.loads(cache.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    # Fallback to bundled files
+    bundled = _load_bundled("config.json")
+    if bundled:
+        try:
+            return json.loads(bundled)
         except Exception:
             pass
     return {}

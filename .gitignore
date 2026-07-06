@@ -4,6 +4,9 @@ dist/
 *.spec
 __pycache__/
 
+# Website binary (distribute separately)
+website/Klatom.exe
+
 # Runtime data (created by exe)
 data/
 logs/

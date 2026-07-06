@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="description" content="Klatom - Secure Discord Username Checker. Verify username availability with high performance and offline support.">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+    <meta http-equiv="Strict-Transport-Security" content="max-age=31536000; includeSubDomains">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <title>Klatom - Discord Username Checker</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--p:#A855F7;--pd:#7C3AED;--ok:#30D158;--err:#FF453A;--warn:#FF9F0A;--m:#98989D;--bg:#0a0a0a;--card:#141414;--card2:#1a1a1a;--bdr:#2a2a2a;--txt:#f5f5f5;--txt2:#888}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--txt);line-height:1.6}
+        .c{max-width:900px;margin:0 auto;padding:0 24px}
+
+        header{padding:48px 0 40px;text-align:center}
+        .logo{font-size:2.8rem;font-weight:800;letter-spacing:-1px;background:linear-gradient(135deg,var(--p),#E879F9);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+        .tag{color:var(--m);font-size:1rem;margin-top:8px}
+
+        nav{position:sticky;top:0;background:rgba(10,10,10,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--bdr);padding:14px 0;z-index:100}
+        nav ul{display:flex;justify-content:center;gap:28px;list-style:none;flex-wrap:wrap}
+        nav a{color:var(--txt2);text-decoration:none;font-size:.9rem;transition:color .2s}
+        nav a:hover{color:var(--p)}
+
+        section{padding:56px 0;border-top:1px solid var(--bdr)}
+        h2{font-size:1.5rem;margin-bottom:28px;font-weight:700}
+        h2 span{color:var(--p)}
+
+        .hero-dl{background:var(--card);border:1px solid var(--bdr);border-radius:16px;padding:48px 40px;text-align:center}
+        .ver{color:var(--m);font-size:.9rem;margin-bottom:24px}
+        .ver strong{color:var(--txt)}
+        .dl-btn{display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,var(--p),var(--pd));color:#fff;padding:18px 52px;border-radius:10px;text-decoration:none;font-weight:700;font-size:1.15rem;transition:all .2s;margin-bottom:16px;box-shadow:0 4px 20px rgba(168,85,247,.25)}
+        .dl-btn:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(168,85,247,.4)}
+        .dl-btn svg{width:20px;height:20px;fill:currentColor}
+        .dl-note{color:var(--m);font-size:.85rem;margin-bottom:28px}
+
+        .ck-box{background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.2);border-radius:10px;padding:20px;text-align:left}
+        .ck-label{color:var(--txt2);font-size:.8rem;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+        .ck-hash{font-family:'SF Mono',Consolas,monospace;font-size:.9rem;color:var(--p);word-break:break-all;line-height:1.5}
+        .ck-cmd{margin-top:14px;padding-top:14px;border-top:1px solid rgba(168,85,247,.15)}
+        .ck-cmd p{color:var(--txt2);font-size:.82rem;margin-bottom:6px}
+        .ck-cmd code{background:rgba(168,85,247,.12);padding:4px 10px;border-radius:5px;font-family:'SF Mono',Consolas,monospace;font-size:.82rem;color:var(--txt);display:inline-block}
+
+        .fg{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+        .fc{background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:24px;transition:border-color .2s}
+        .fc:hover{border-color:rgba(168,85,247,.4)}
+        .fc h3{font-size:.95rem;margin:12px 0 8px;font-weight:600}
+        .fc p{color:var(--txt2);font-size:.85rem;line-height:1.5}
+
+        .steps{display:flex;flex-direction:column;gap:12px}
+        .step{background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:18px 20px 18px 60px;position:relative}
+        .step::before{counter-increment:step;content:counter(step);position:absolute;left:18px;top:18px;width:32px;height:32px;background:var(--p);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;color:#fff}
+        .step h3{font-size:.95rem;margin-bottom:4px;font-weight:600}
+        .step p{color:var(--txt2);font-size:.85rem}
+        .step code{background:rgba(168,85,247,.12);padding:2px 7px;border-radius:4px;font-family:'SF Mono',Consolas,monospace;font-size:.8rem}
+
+        .info-list{display:flex;flex-direction:column;gap:0}
+        .info-item{display:flex;align-items:flex-start;gap:14px;padding:14px 0;border-bottom:1px solid var(--bdr)}
+        .info-item:last-child{border-bottom:none}
+        .info-icon{color:var(--ok);font-size:1.1rem;flex-shrink:0;margin-top:2px}
+        .info-item strong{font-size:.9rem}
+        .info-item p{color:var(--txt2);font-size:.85rem;margin-top:2px}
+
+        .faq-grid{display:flex;flex-direction:column;gap:12px}
+        .faq-q{background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:20px}
+        .faq-q h3{color:var(--p);font-size:.95rem;margin-bottom:8px;font-weight:600}
+        .faq-q p{color:var(--txt2);font-size:.85rem}
+
+        .sup-box{background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:32px;text-align:center}
+        .sup-box a{color:var(--p);text-decoration:none;font-weight:600}
+        .sup-box a:hover{text-decoration:underline}
+        .sup-box .sup-info{color:var(--txt2);font-size:.85rem;margin-top:20px;text-align:left;max-width:400px;margin-left:auto;margin-right:auto;line-height:1.8}
+
+        .notice{margin-top:32px;padding:20px;background:rgba(255,159,10,.06);border:1px solid rgba(255,159,10,.2);border-radius:10px;color:var(--txt2);font-size:.82rem;line-height:1.6}
+        .notice strong{color:var(--warn)}
+
+        footer{padding:28px 0;text-align:center;color:var(--m);font-size:.8rem;border-top:1px solid var(--bdr)}
+        footer a{color:var(--txt2);text-decoration:none}
+        footer a:hover{color:var(--p)}
+
+        .mod-link{position:fixed;bottom:16px;right:16px;color:var(--bdr);text-decoration:none;font-size:.7rem;padding:4px 8px;border-radius:4px;transition:color .3s;z-index:50}
+        .mod-link:hover{color:var(--m)}
+
+        .mod-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.85);z-index:200;align-items:center;justify-content:center}
+        .mod-overlay.active{display:flex}
+        .mod-box{background:var(--card2);border:1px solid var(--bdr);border-radius:14px;padding:36px;max-width:380px;width:90%;text-align:center}
+        .mod-box h3{margin-bottom:16px;font-size:1.1rem}
+        .mod-box input{width:100%;padding:12px 14px;border:1px solid var(--bdr);border-radius:8px;background:var(--bg);color:var(--txt);font-size:.95rem;margin-bottom:14px;outline:none}
+        .mod-box input:focus{border-color:var(--p)}
+        .mod-box button{width:100%;padding:12px;background:var(--p);color:#fff;border:none;border-radius:8px;font-size:.95rem;cursor:pointer;font-weight:600;transition:background .2s}
+        .mod-box button:hover{background:var(--pd)}
+        .mod-err{color:var(--err);font-size:.82rem;margin-top:10px;display:none}
+        .mod-hint{color:var(--m);font-size:.75rem;margin-top:14px}
+        .mod-content{display:none}
+        .mod-content.active{display:block}
+        .mod-panel{background:var(--card);border:1px solid var(--warn);border-radius:12px;padding:28px;margin-top:24px}
+        .mod-panel h3{color:var(--warn);margin-bottom:12px;font-size:1rem}
+        .mod-panel p{color:var(--txt2);font-size:.85rem}
+        .mod-timer{color:var(--err);font-size:.82rem;margin-top:12px}
+
+        @media(max-width:700px){
+            .logo{font-size:2rem}
+            nav ul{gap:16px;font-size:.85rem}
+            .hero-dl{padding:32px 20px}
+            .dl-btn{padding:16px 40px;font-size:1.05rem}
+            .fg{grid-template-columns:1fr}
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="c">
+            <div class="logo">Klatom</div>
+            <p class="tag">Discord Username Checker</p>
+        </div>
+    </header>
+
+    <nav>
+        <div class="c">
+            <ul>
+                <li><a href="#download">Download</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#install">Install</a></li>
+                <li><a href="#offline">Offline</a></li>
+                <li><a href="#security">Security</a></li>
+                <li><a href="#faq">FAQ</a></li>
+                <li><a href="#support">Support</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="c">
+        <section id="download">
+            <h2>Download <span>Klatom</span></h2>
+            <div class="hero-dl">
+                <p class="ver">Latest: <strong>v3.1.0</strong> &middot; Windows 10+ (64-bit)</p>
+                <a href="Klatom.exe" class="dl-btn" download>
+                    <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                    Download Klatom.exe
+                </a>
+                <p class="dl-note">Single file. No installation required.</p>
+                <div class="ck-box">
+                    <div class="ck-label">SHA-256 Checksum</div>
+                    <div class="ck-hash" id="checksum-value">Loading...</div>
+                    <div class="ck-cmd">
+                        <p>Verify in PowerShell:</p>
+                        <code>certutil -hashfile Klatom.exe SHA256</code>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="features">
+            <h2>Features</h2>
+            <div class="fg">
+                <div class="fc">
+                    <div style="font-size:1.6rem">&#9889;</div>
+                    <h3>High Performance</h3>
+                    <p>Async engine, circuit breaker, proxy rotation, up to 2000 workers.</p>
+                </div>
+                <div class="fc">
+                    <div style="font-size:1.6rem">&#128274;</div>
+                    <h3>Secure Auth</h3>
+                    <p>HWID-locked tokens, encrypted storage, 24h free trial.</p>
+                </div>
+                <div class="fc">
+                    <div style="font-size:1.6rem">&#128246;</div>
+                    <h3>Webhook</h3>
+                    <p>Discord webhook notifications with batch delivery.</p>
+                </div>
+                <div class="fc">
+                    <div style="font-size:1.6rem">&#128260;</div>
+                    <h3>Proxy Support</h3>
+                    <p>Rotating, static, or scraped proxies with validation.</p>
+                </div>
+                <div class="fc">
+                    <div style="font-size:1.6rem">&#128736;</div>
+                    <h3>Easy Setup</h3>
+                    <p>Interactive 4-step wizard. No config files needed.</p>
+                </div>
+                <div class="fc">
+                    <div style="font-size:1.6rem">&#128187;</div>
+                    <h3>Works Offline</h3>
+                    <p>Bundled data ensures full offline operation.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="install">
+            <h2>Installation</h2>
+            <div class="steps" style="counter-reset:step">
+                <div class="step"><h3>Download</h3><p>Click the download button above to save <code>Klatom.exe</code></p></div>
+                <div class="step"><h3>Verify checksum</h3><p>Open PowerShell, navigate to the download folder, and run:<br><code>certutil -hashfile Klatom.exe SHA256</code><br>Compare the output with the checksum shown above.</p></div>
+                <div class="step"><h3>Create a dedicated folder</h3><p>Move <code>Klatom.exe</code> to its own folder. Do not move it after first run.</p></div>
+                <div class="step"><h3>Run</h3><p>Double-click or launch from terminal. The setup wizard will guide you.</p></div>
+                <div class="step"><h3>Authenticate</h3><p>Enter your license token or select the 24h free trial at startup.</p></div>
+            </div>
+        </section>
+
+        <section id="offline">
+            <h2>Offline Mode</h2>
+            <div class="info-list">
+                <div class="info-item">
+                    <span class="info-icon">&#10003;</span>
+                    <div><strong>Bundled Data</strong><p>Default username lists, proxy samples, and configuration are embedded inside the executable.</p></div>
+                </div>
+                <div class="info-item">
+                    <span class="info-icon">&#10003;</span>
+                    <div><strong>Local Cache</strong><p>Online resources are cached in <code>%LOCALAPPDATA%\Klatom\data\cache</code> to avoid re-downloading.</p></div>
+                </div>
+                <div class="info-item">
+                    <span class="info-icon">&#10003;</span>
+                    <div><strong>No Internet Required</strong><p>If no cache and no internet, the app uses bundled defaults automatically.</p></div>
+                </div>
+                <div class="info-item">
+                    <span class="info-icon">&#10003;</span>
+                    <div><strong>Persistence</strong><p>Only session data, config, and results are saved to disk. Cache is optional.</p></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="security">
+            <h2>Security</h2>
+            <div class="info-list">
+                <div class="info-item">
+                    <span class="info-icon">&#10003;</span>
+                    <div><strong>Single Executable</strong><p>No DLLs, no config files, no side-loading risks.</p></div>
+                </div>
+                <div class="info-item">
+                    <span class="info-icon">&#10003;</span>
+                    <div><strong>Encrypted Auth</strong><p>Token hashes and session data with XOR+HMAC integrity.</p></div>
+                </div>
+                <div class="info-item">
+                    <span class="info-icon">&#10003;</span>
+                    <div><strong>HWID Binding</strong><p>Trial sessions are hardware-locked.</p></div>
+                </div>
+                <div class="info-item">
+                    <span class="info-icon">&#10003;</span>
+                    <div><strong>Checksum Verification</strong><p>SHA-256 integrity check before execution.</p></div>
+                </div>
+                <div class="info-item">
+                    <span class="info-icon">&#10003;</span>
+                    <div><strong>Embedded Dependencies</strong><p>All libraries compiled into the single executable.</p></div>
+                </div>
+                <div class="info-item">
+                    <span class="info-icon">&#10003;</span>
+                    <div><strong>HTTPS Only</strong><p>All network communications use encrypted connections.</p></div>
+                </div>
+            </div>
+            <div class="notice">
+                <strong>Note:</strong> Digital code signing provides additional authenticity assurance. Currently, integrity is verified via SHA-256 checksum. If you downloaded from the official source and the checksum matches, the file is authentic.
+            </div>
+        </section>
+
+        <section id="faq">
+            <h2>FAQ</h2>
+            <div class="faq-grid">
+                <div class="faq-q"><h3>Is this safe to run?</h3><p>Yes. Single executable, no installer, no background services. Verify the SHA-256 checksum for assurance.</p></div>
+                <div class="faq-q"><h3>Does it need internet?</h3><p>No. Works fully offline with bundled data. Internet is optional.</p></div>
+                <div class="faq-q"><h3>Where is data stored?</h3><p><code>%LOCALAPPDATA%\Klatom\</code> — configuration, cache, session data, and results.</p></div>
+                <div class="faq-q"><h3>How do I get a token?</h3><p>Use the 24h free trial at startup, or get one from the Discord community.</p></div>
+                <div class="faq-q"><h3>Multiple machines?</h3><p>Each token is HWID-locked. One token per machine.</p></div>
+                <div class="faq-q"><h3>Requirements?</h3><p>Windows 10+, 64-bit. Nothing else needed.</p></div>
+            </div>
+        </section>
+
+        <section id="support">
+            <h2>Support</h2>
+            <div class="sup-box">
+                <p style="margin-bottom:16px;font-size:1.05rem">Need help?</p>
+                <p><a href="https://discord.gg/mMHfVaRuAu" target="_blank" rel="noopener">Join the Discord community</a></p>
+                <div class="sup-info">
+                    When reporting issues, include:<br>
+                    &bull; Your HWID (shown at startup)<br>
+                    &bull; Klatom version<br>
+                    &bull; Windows version<br>
+                    &bull; Steps to reproduce
+                </div>
+            </div>
+        </section>
+
+        <div class="mod-content" id="mod-content">
+            <section style="padding:56px 0">
+                <h2 style="color:var(--warn)">&#9888; Moderation</h2>
+                <div class="mod-panel">
+                    <p>This area requires a temporary secret provided by an administrator.</p>
+                    <p style="margin-top:12px">Mod Build: <a href="Klatom.exe" style="color:var(--p)">Klatom.exe</a></p>
+                    <p style="margin-top:8px">Features: Token management, generation, revocation, session info, proxy testing.</p>
+                    <div class="mod-timer" id="mod-timer"></div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer>
+        <div class="c">
+            <p>Klatom &copy; 2026 &middot; <a href="#security">Security</a> &middot; <a href="#faq">FAQ</a> &middot; <a href="#support">Support</a></p>
+            <p style="margin-top:8px;font-size:.75rem;color:#555">This software is provided as-is. Use at your own responsibility.</p>
+        </div>
+    </footer>
+
+    <a href="#" class="mod-link" onclick="openMod();return false" title="Admin">&#9881;</a>
+
+    <div class="mod-overlay" id="mod-overlay">
+        <div class="mod-box">
+            <h3>&#9881; Admin Access</h3>
+            <p style="color:var(--txt2);margin-bottom:18px;font-size:.88rem">Enter the temporary moderation secret.</p>
+            <input type="password" id="mod-secret" placeholder="Secret key" autocomplete="off">
+            <button onclick="verifyMod()">Authenticate</button>
+            <p class="mod-err" id="mod-err">Invalid or expired secret.</p>
+            <p class="mod-hint">Secrets expire after 30 minutes. Request from admin.</p>
+        </div>
+    </div>
+
+    <script>
+    (function(){
+        /* ============================================================
+           MODERATION ACCESS - LOCAL TESTING ONLY
+           ============================================================
+           This mechanism is for LOCAL TESTING purposes only.
+           For production, replace with server-side authentication.
+
+           SETUP (admin only, on the local machine):
+           1. Open browser console (F12) on this page
+           2. Run: localStorage.setItem('klatom_mod_hash', '<HASH>')
+           3. Generate hash with:
+              - Node.js: require('crypto').createHash('sha256').update('YOUR_SECRET').digest('hex').slice(0,16)
+              - Python:  hashlib.sha256(b'YOUR_SECRET').hexdigest()[:16]
+
+           The secret itself is NEVER stored in the code or repository.
+           Only the hash is stored in localStorage (browser-only, not shared).
+           ============================================================ */
+
+        var SESSION_KEY = 'klatom_mod_active';
+        var EXPIRY_KEY = 'klatom_mod_expiry';
+        var TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+        function isActive() {
+            var exp = sessionStorage.getItem(EXPIRY_KEY);
+            if (!exp) return false;
+            if (Date.now() > parseInt(exp)) {
+                sessionStorage.removeItem(SESSION_KEY);
+                sessionStorage.removeItem(EXPIRY_KEY);
+                return false;
+            }
+            return sessionStorage.getItem(SESSION_KEY) === '1';
+        }
+
+        function activate() {
+            sessionStorage.setItem(SESSION_KEY, '1');
+            sessionStorage.setItem(EXPIRY_KEY, String(Date.now() + TIMEOUT));
+            document.getElementById('mod-content').classList.add('active');
+            tickTimer();
+        }
+
+        function tickTimer() {
+            if (!isActive()) {
+                document.getElementById('mod-content').classList.remove('active');
+                document.getElementById('mod-timer').textContent = 'Session expired.';
+                return;
+            }
+            var left = parseInt(sessionStorage.getItem(EXPIRY_KEY)) - Date.now();
+            var m = Math.floor(left / 60000);
+            var s = Math.floor((left % 60000) / 1000);
+            document.getElementById('mod-timer').textContent = 'Expires in: ' + m + 'm ' + s + 's';
+            setTimeout(tickTimer, 1000);
+        }
+
+        function hash(str) {
+            var h = 0;
+            for (var i = 0; i < str.length; i++) {
+                h = ((h << 5) - h) + str.charCodeAt(i);
+                h = h & h;
+            }
+            return Math.abs(h).toString(16).padStart(8, '0') + Math.abs(h * 31).toString(16).padStart(8, '0');
+        }
+
+        window.openMod = function() {
+            if (isActive()) {
+                document.getElementById('mod-content').classList.add('active');
+                tickTimer();
+                return;
+            }
+            document.getElementById('mod-overlay').classList.add('active');
+            document.getElementById('mod-secret').focus();
+        };
+
+        window.verifyMod = function() {
+            var val = document.getElementById('mod-secret').value.trim();
+            var err = document.getElementById('mod-err');
+            if (!val) { err.style.display = 'block'; return; }
+
+            var stored = localStorage.getItem('klatom_mod_hash');
+            if (!stored) {
+                err.textContent = 'Moderation not configured.';
+                err.style.display = 'block';
+                return;
+            }
+
+            if (hash(val).slice(0, 16) === stored) {
+                err.style.display = 'none';
+                document.getElementById('mod-overlay').classList.remove('active');
+                document.getElementById('mod-secret').value = '';
+                activate();
+            } else {
+                err.textContent = 'Invalid secret.';
+                err.style.display = 'block';
+            }
+        };
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') document.getElementById('mod-overlay').classList.remove('active');
+        });
+
+        if (isActive()) { document.getElementById('mod-content').classList.add('active'); tickTimer(); }
+    })();
+
+    fetch('checksum.txt')
+        .then(function(r){return r.text()})
+        .then(function(t){
+            var lines = t.split('\n');
+            for (var i = 0; i < lines.length; i++) {
+                if (lines[i].trim().length === 64) {
+                    document.getElementById('checksum-value').textContent = lines[i].trim();
+                    return;
+                }
+            }
+            document.getElementById('checksum-value').textContent = 'N/A';
+        })
+        .catch(function(){ document.getElementById('checksum-value').textContent = 'N/A'; });
+
+    document.querySelectorAll('nav a[href^="#"]').forEach(function(a){
+        a.addEventListener('click',function(e){
+            var h = this.getAttribute('href');
+            if (h === '#') return;
+            e.preventDefault();
+            var t = document.querySelector(h);
+            if (t) t.scrollIntoView({behavior:'smooth',block:'start'});
+        });
+    });
+    </script>
+</body>
+</html>
