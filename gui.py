@@ -1060,10 +1060,10 @@ class App(tk.Tk):
                 _idx[0] += 1
             return i, names[i]
 
-        connector = aiohttp.TCPConnector(limit=MAX_CONCURRENCY * 2, limit_per_host=0, ttl_dns_cache=300)
         session_timeout = aiohttp.ClientTimeout(total=None, sock_connect=5, sock_read=30)
 
         async def _run():
+            connector = aiohttp.TCPConnector(limit=MAX_CONCURRENCY * 2, limit_per_host=0, ttl_dns_cache=300)
             session = aiohttp.ClientSession(connector=connector, trust_env=False, timeout=session_timeout)
             checker = Checker(pm, timeout=cfg.timeout, scraped=cfg.scraped, stats=stats)
 

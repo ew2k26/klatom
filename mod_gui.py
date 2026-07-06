@@ -288,7 +288,7 @@ class ModApp(tk.Tk):
             else:
                 messagebox.showwarning("KLATOM", "Token not found.")
 
-        self._make_button(revoke_frame, "Revoke", DANGER, _revoke, fg="#fff", bg=DANGER, hover_bg="#CC3A30").pack(side="left")
+        self._make_button(revoke_frame, "Revoke", DANGER, _revoke, fg="#fff", hover_bg="#CC3A30").pack(side="left")
 
     # ── Generate Tokens ──
 
@@ -433,9 +433,8 @@ class ModApp(tk.Tk):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-            connector = aiohttp.TCPConnector(limit=200, limit_per_host=0, ttl_dns_cache=300)
-
             async def _run_all():
+                connector = aiohttp.TCPConnector(limit=200, limit_per_host=0, ttl_dns_cache=300)
                 async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=5), trust_env=False) as sess:
                     tasks = [_test_one(sess, p) for p in proxies]
                     await asyncio.gather(*tasks)
