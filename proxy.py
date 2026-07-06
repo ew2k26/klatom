@@ -269,20 +269,20 @@ class ProxyManager:
             if on_progress and tested[0] % 50 == 0:
                 on_progress(tested[0], len(self._proxies), working_count[0])
 
-    tasks = [_test_one(p) for p in self._proxies]
-    await asyncio.gather(*tasks)
+        tasks = [_test_one(p) for p in self._proxies]
+        await asyncio.gather(*tasks)
 
-    # sort: working first by latency, then dead
-    results.sort(key=lambda x: (not x[2], x[1]))
+        # sort: working first by latency, then dead
+        results.sort(key=lambda x: (not x[2], x[1]))
 
-    # update internal latency data for working proxies
-    for proxy, latency_ms, is_ok in results:
-        if is_ok and latency_ms < 99999:
-            self._latencies[proxy] = latency_ms / 1000.0
-            self._latency_count[proxy] = 1
+        # update internal latency data for working proxies
+        for proxy, latency_ms, is_ok in results:
+            if is_ok and latency_ms < 99999:
+                self._latencies[proxy] = latency_ms / 1000.0
+                self._latency_count[proxy] = 1
 
-    if on_progress:
-        on_progress(len(self._proxies), len(self._proxies), working_count[0])
+        if on_progress:
+            on_progress(len(self._proxies), len(self._proxies), working_count[0])
 
         return results
 
