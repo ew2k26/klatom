@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KLATOM v3.2 - Terminal UI."""
+"""KLATOM v3.3 - Terminal UI."""
 
 from __future__ import annotations
 
@@ -17,18 +17,14 @@ console = Console()
 
 def banner() -> Panel:
     inner = Text()
-    inner.append("K", style=f"bold {C.PRIMARY}")
-    inner.append("L", style=f"bold {C.PRIMARY}")
-    inner.append("A", style=f"bold {C.PRIMARY}")
-    inner.append("T", style=f"bold {C.PRIMARY}")
-    inner.append("O", style=f"bold {C.PRIMARY}")
-    inner.append("M", style=f"bold {C.PRIMARY}")
+    inner.append("  KL", style=f"bold {C.PRIMARY}")
+    inner.append("ATOM", style=f"bold white")
     inner.append(f"  v{VERSION}", style=f"{C.MUTED}")
     return Panel(
         inner,
-        box=box.ROUNDED,
+        box=box.DOUBLE,
         border_style=C.PRIMARY,
-        padding=(1, 4),
+        padding=(1, 2),
     )
 
 
@@ -39,7 +35,7 @@ def progress_steps(current: int, total: int = 5) -> str:
         if i < current:
             parts.append(f"[{C.SUCCESS}]{label}[/]")
         elif i == current:
-            parts.append(f"[{C.PRIMARY}]{label}[/]")
+            parts.append(f"[{C.PRIMARY}][{label}][/]")
         else:
             parts.append(f"[{C.MUTED}]{label}[/]")
     return "  ".join(parts)
@@ -48,7 +44,7 @@ def progress_steps(current: int, total: int = 5) -> str:
 def section(title: str) -> None:
     console.print()
     console.print(Text(title, style=f"bold {C.PRIMARY}"))
-    console.print("─" * 40, style=C.BORDER)
+    console.print("─" * 50, style=C.BORDER)
 
 
 def card(title: str | None, *lines: str, border: str = C.PRIMARY) -> None:
@@ -127,7 +123,6 @@ def speed_test_result(results: list[tuple[str, float, bool]]) -> None:
         t.add_row("Medium (1-2s)", f"[{C.WARNING}]{len(medium)}[/]")
         t.add_row("Slow (>2s)", f"[{C.DANGER}]{len(slow)}[/]")
 
-        # show top 5 fastest
         top5 = sorted(working, key=lambda x: x[1])[:5]
         if top5:
             top_str = "  ".join(f"{r[0].split('://')[-1][:20]} [{C.SUCCESS}]{r[1]:.0f}ms[/]" for r in top5)
@@ -175,7 +170,7 @@ def live_card(
 
     if errors > 0:
         inner.add_row(
-            f"[{C.WARNING}]Errors[/]", f"[{C.WARNING}]{errors}[/]",
+            f"[{C.DANGER}]Errors[/]", f"[{C.DANGER}]{errors}[/]",
             "Elapsed", f"{elapsed:.0f}s",
         )
     elif ratelimited > 0:
@@ -229,7 +224,6 @@ def live_card(
 
     if feed:
         content.add_section()
-        # filter feed to show last meaningful entries, skip excessive ? marks
         display_feed = feed[-12:]
         feed_str = "  ".join(display_feed)
         content.add_row(Text.from_markup(feed_str))

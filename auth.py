@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Klatom – Token validation with encrypted storage."""
+"""KLATOM v3.3 - Token validation with encrypted storage."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from config import DATA_DIR, C
 from crypto import (
     get_hwid, generate_token as _gen_token, hash_token,
     save_auth, load_auth, token_in_store, add_token_hash,
-    save_session, load_session, ensure_creator, is_creator_token,
+    save_session, load_session,
 )
 
 _AUTH_FILE = DATA_DIR / ".auth"
@@ -113,14 +113,20 @@ def show_session_info(token: str) -> None:
     from ui import console
     from rich.panel import Panel
     from rich.table import Table
+    from rich.text import Text
 
     hwid = get_hwid()
     token_type = _get_token_type(token)
+
+    inner = Text()
+    inner.append("  KLATOM", style=f"bold {C.PRIMARY}")
+    inner.append(f"  v{__import__('config').VERSION}", style=f"{C.MUTED}")
 
     t = Table(box=None, show_header=False, padding=(0, 2))
     t.add_column(style=C.MUTED, width=16)
     t.add_column(style="white")
 
+    t.add_row("Status", f"[{C.SUCCESS}]Authenticated[/]")
     t.add_row("Token Type", f"[{C.PRIMARY}]{token_type}[/]")
     t.add_row("HWID", f"[{C.MUTED}]{hwid}[/]")
     t.add_row("Machine", f"[{C.MUTED}]{platform.node()}[/]")
@@ -133,14 +139,14 @@ def show_session_info(token: str) -> None:
         t.add_row("Expires", f"[{C.MUTED}]{expires.strftime('%Y-%m-%d %H:%M')}[/]")
 
     console.print(Panel(
-        t, title=f"[{C.PRIMARY}]Session Info[/]",
+        t, title=inner,
         title_align="left", border_style=C.PRIMARY, padding=(0, 1),
     ))
 
 
 async def _log_to_webhook(token: str, action: str, webhook_url: str) -> None:
     embed = {
-        "title": f"Klatom - {action}", "color": 0xA855F7,
+        "title": f"KLATOM - {action}", "color": 0xA855F7,
         "fields": [
             {"name": "Token", "value": f"`{token}`", "inline": True},
             {"name": "Type", "value": f"`{_get_token_type(token)}`", "inline": True},
@@ -157,65 +163,110 @@ async def _log_to_webhook(token: str, action: str, webhook_url: str) -> None:
         pass
 
 
-async def check_auth(webhook_url: str = "") -> tuple[bool, str]:
+def check_auth(webhook_url: str = "") -> tuple[bool, str]:
+    """Check authentication. Returns (authenticated, token).
+
+    Flow:
+    1. Check if CREATOR is already in .auth (manual setup)
+    2. Check if trial is active
+    3. If .auth has NO tokens → first run → prompt to set up creator
+    4. Otherwise → prompt for token or trial
+    """
     from ui import console
     from rich.panel import Panel
     from rich.prompt import Prompt
+    from rich.text import Text
+    from rich import box
 
-    ensure_creator(_AUTH_FILE)
+    # Check for active trial first
+    if _is_trial_active():
+        show_session_info("TRIAL")
+        return True, "TRIAL"
 
+    # Check if CREATOR is already set up in .auth
     data = load_auth(_AUTH_FILE)
     if data and hash_token("CREATOR") in data.get("t", []):
         show_session_info("CREATOR")
         return True, "CREATOR"
 
-    if _is_trial_active():
-        show_session_info("TRIAL")
-        if webhook_url:
-            await _log_to_webhook("TRIAL", "Trial Active", webhook_url)
-        return True, "TRIAL"
+    # Check if any tokens exist in .auth
+    has_tokens = data and len(data.get("t", [])) > 0
 
     console.print()
-    console.print(Panel(
-        "[bold]Klatom License System[/]\n\n"
-        "  [1] Enter token\n"
-        "  [2] Start 24h free trial\n"
-        "  [3] Exit",
-        border_style=C.PRIMARY, title="Authentication", padding=(1, 2),
-    ))
 
-    choice = Prompt.ask(f"[{C.PRIMARY}]Choose[/]", choices=["1", "2", "3"], default="1").strip()
+    if not has_tokens:
+        # First run: no tokens in .auth at all
+        console.print(Panel(
+            Text.from_markup(
+                f"[bold {C.PRIMARY}]Welcome to KLATOM[/]\n\n"
+                f"  [{C.MUTED}]No license found. This appears to be the first run.[/]\n\n"
+                f"  [{C.PRIMARY}]1[/]  Enter a license token\n"
+                f"  [{C.PRIMARY}]2[/]  Start 24h free trial\n"
+                f"  [{C.PRIMARY}]3[/]  Exit"
+            ),
+            border_style=C.PRIMARY,
+            title=Text.from_markup(f"[{C.PRIMARY}]KLATOM[/] - License Required"),
+            title_align="left",
+            padding=(1, 2),
+        ))
+    else:
+        # Tokens exist but CREATOR not set → user needs to enter a valid token
+        console.print(Panel(
+            Text.from_markup(
+                f"[bold {C.PRIMARY}]KLATOM License[/]\n\n"
+                f"  [{C.MUTED}]Enter your license token to continue.[/]\n\n"
+                f"  [{C.PRIMARY}]1[/]  Enter token\n"
+                f"  [{C.PRIMARY}]2[/]  Start 24h free trial\n"
+                f"  [{C.PRIMARY}]3[/]  Exit"
+            ),
+            border_style=C.PRIMARY,
+            title=Text.from_markup(f"[{C.PRIMARY}]KLATOM[/] - Authentication"),
+            title_align="left",
+            padding=(1, 2),
+        ))
+
+    choice = Prompt.ask(f"\n[{C.PRIMARY}]Choose[/]", choices=["1", "2", "3"], default="1").strip()
 
     if choice == "3":
+        console.print(f"[{C.MUTED}]Goodbye.[/]")
         return False, ""
+
     if choice == "2":
         _activate_trial()
-        console.print(f"[{C.SUCCESS}]Free trial activated — {TRIAL_HOURS}h started.[/]")
+        console.print(f"\n[{C.SUCCESS}]Free trial activated - {TRIAL_HOURS}h started.[/]")
         show_session_info("TRIAL")
-        if webhook_url:
-            await _log_to_webhook("TRIAL", "Trial Started", webhook_url)
         return True, "TRIAL"
 
-    token = Prompt.ask(f"[{C.PRIMARY}]Token[/]").strip()
+    # Choice 1: Enter token
+    console.print()
+    token = Prompt.ask(f"[{C.PRIMARY}]Enter your license token[/]").strip()
     if not token:
         console.print(f"[{C.DANGER}]No token entered.[/]")
         return False, ""
 
-    if webhook_url:
-        await _log_to_webhook(token, "Token Attempt", webhook_url)
-
+    # Check if token is valid
     if is_token_approved(token):
-        console.print(f"[{C.SUCCESS}]Token approved.[/]")
+        console.print(f"\n[{C.SUCCESS}]Token approved.[/]")
         show_session_info(token)
         return True, token
 
+    # First run: if .auth has no hashes, auto-approve this token as creator
     data = load_auth(_AUTH_FILE)
-    if data and not data.get("t"):
-        console.print(f"[{C.SUCCESS}]First run — you are the creator.[/]")
+    if data is not None and not data.get("t"):
+        console.print(f"\n[{C.SUCCESS}]First run - creator token set.[/]")
         add_approved_token("CREATOR")
         add_approved_token(token)
         show_session_info(token)
         return True, token
 
-    console.print(f"[{C.DANGER}]Invalid token.[/]")
+    # If .auth doesn't exist at all, create it and approve
+    if data is None:
+        console.print(f"\n[{C.SUCCESS}]Creator token registered.[/]")
+        add_approved_token("CREATOR")
+        add_approved_token(token)
+        show_session_info(token)
+        return True, token
+
+    console.print(f"\n[{C.DANGER}]Invalid or expired token.[/]")
+    console.print(f"[{C.MUTED}]Contact an administrator for a valid token.[/]")
     return False, ""

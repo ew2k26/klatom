@@ -328,6 +328,14 @@ def main() -> None:
         return
 
     try:
+        # Authentication check
+        from auth import check_auth
+        webhook_url = config.get("webhook", "")
+        authenticated, token = check_auth(webhook_url=webhook_url)
+        if not authenticated:
+            console.print(f"\n[{C.DANGER}]Authentication failed. Exiting.[/]")
+            sys.exit(0)
+
         if settings.no_wizard:
             proxy_file = config.get("last_proxy_file", str(DATA_DIR / "proxies.txt"))
             names_file = config.get("last_names_file", str(DATA_DIR / "names_to_check.txt"))
