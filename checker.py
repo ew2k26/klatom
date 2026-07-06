@@ -331,11 +331,6 @@ def main() -> None:
     # Launch GUI by default (unless --terminal or --no-wizard)
     if not settings.terminal and not settings.no_wizard:
         try:
-            import tkinter as _tk
-            _tk.WmWithdraw(_tk._default_root or _tk.Tk())
-        except Exception:
-            pass
-        try:
             from gui import main as gui_main
             gui_main()
             return

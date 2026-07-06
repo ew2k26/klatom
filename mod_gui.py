@@ -557,6 +557,16 @@ class ModApp(tk.Tk):
 
 
 def main() -> None:
+    # Hide console window on Windows
+    try:
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.GetConsoleWindow()
+        if h:
+            ctypes.windll.user32.ShowWindow(h, 0)  # SW_HIDE
+    except Exception:
+        pass
+
     app = ModApp()
     app.mainloop()
 

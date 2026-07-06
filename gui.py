@@ -1212,6 +1212,16 @@ def main() -> None:
     ensure_file(DATA_DIR / "names_to_check.txt")
     ensure_file(LOGS_DIR / "error.txt", clean=True)
 
+    # Hide console window on Windows (only when launched as GUI)
+    try:
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.GetConsoleWindow()
+        if h:
+            ctypes.windll.user32.ShowWindow(h, 0)  # SW_HIDE
+    except Exception:
+        pass
+
     app = App()
     app.mainloop()
 
