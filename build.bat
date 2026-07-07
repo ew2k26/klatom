@@ -1,5 +1,5 @@
 @echo off
-REM Klatom Build Script (Simple)
+REM ew2 Build Script (Simple)
 python -m PyInstaller klatom.spec --clean --noconfirm
 if errorlevel 1 (
     echo [ERROR] Build failed!
@@ -7,6 +7,6 @@ if errorlevel 1 (
     exit /b 1
 )
 echo.
-echo Build complete: dist\Klatom.exe
-certutil -hashfile dist\Klatom.exe SHA256
+echo Build complete: dist\ew2.exe
+certutil -hashfile dist\ew2.exe SHA256
 pause

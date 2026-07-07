@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KLATOM v3.3 - Proxy manager with rotation, cooldowns, scoring, and speed testing."""
+"""ew² v4.0 - Proxy manager with rotation, cooldowns, scoring, and speed testing."""
 
 from __future__ import annotations
 

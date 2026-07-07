@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Klatom – GitHub loader. Encrypted URL, works on ALL machines."""
+"""ew² – GitHub loader. Encrypted URL, works on ALL machines."""
 
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ import aiohttp
 _GITHUB_URL_B64 = "Rrjgzvz2ER4CLkcrBMVv7VueVtYDpo/P3gW4HFPxfshD4/HK66haVRQrH24PzW/qQ9NOxA+6w9LVAbItQ75pxg=="
 
 # ── Internal key derivation (NOT based on HWID) ────────────────────────────
-_KEY_SEED = b"klatom-github-v2-secure"
-_KEY_SALT = b"klatom-fixed-salt-2024"
+_KEY_SEED = b"ew2-github-v2-secure"
+_KEY_SALT = b"ew2-fixed-salt-2026"
 _KDF_ITERS = 100_000
 
 

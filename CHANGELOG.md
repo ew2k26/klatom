@@ -1,5 +1,25 @@
 # Changelog
 
+## v4.0.0
+
+### Changed
+- Complete rebrand from KLATOM to ew²
+- Ultra-dark visual theme across all interfaces
+- Custom app icon integration
+- Updated Discord support link
+- Improved token flow and first-use experience
+- Speed test now uses scraped proxy data directly
+- Enhanced GUI with deeper dark palette
+
+### Added
+- App icon (.ico) support in build and window
+- Multiple icon sizes for Windows compatibility
+
+### Security
+- Updated token prefix to EW2-
+- Updated data directory to %LOCALAPPDATA%\ew2\
+- SHA-256 checksum verification maintained
+
 ## v3.1.0
 
 ### Added

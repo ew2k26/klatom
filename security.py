@@ -1,5 +1,5 @@
 ﻿#!/usr/bin/env python3
-"""Klatom security module - disabled."""
+"""ew² security module - disabled."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def anti_extraction():
     pass
 
 
-_INTEGRITY_SEED = b"klatom-integrity-check-2025"
+_INTEGRITY_SEED = b"ew2-integrity-check-2026"
 
 def compute_integrity() -> str:
     return "no-integrity"
@@ -138,7 +138,7 @@ def load_encrypted(path: Path) -> dict | None:
 
 
 def generate_token() -> str:
-    return f"KLATOM-{os.urandom(4).hex().upper()}-{os.urandom(4).hex().upper()}-{os.urandom(4).hex().upper()}"
+    return f"EW2-{os.urandom(4).hex().upper()}-{os.urandom(4).hex().upper()}-{os.urandom(4).hex().upper()}"
 
 
 def hash_token(token: str) -> str:

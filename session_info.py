@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Klatom – Standalone session info display."""
+"""ew² – Standalone session info display."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ def _token_type(token: str) -> str:
         return "Creator"
     if t == "TRIAL":
         return "Free Trial"
-    if t.startswith("KLATOM-"):
+    if t.startswith("EW2-"):
         return "Premium"
     return "Standard"
 
@@ -103,7 +103,7 @@ def show() -> None:
     console.print()
     console.print(Panel(
         table,
-        title="[#A855F7]Klatom — Session Info[/]",
+        title="[#A855F7]ew² — Session Info[/]",
         title_align="left",
         border_style="#A855F7",
         padding=(0, 1),

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Klatom – Crypto layer (delegates to security.py for maximum protection)."""
+"""ew² – Crypto layer (delegates to security.py for maximum protection)."""
 
 from __future__ import annotations
 

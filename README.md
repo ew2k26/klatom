@@ -1,12 +1,12 @@
-# Klatom
+# ew²
 
-Discord Username Checker v3.1.0
+Discord Username Checker v4.0.0
 
 ## Quick Start
 
-1. Download `Klatom.exe`
-2. Verify checksum: `certutil -hashfile Klatom.exe SHA256`
-3. Run `Klatom.exe`
+1. Download `ew2.exe`
+2. Verify checksum: `certutil -hashfile ew2.exe SHA256`
+3. Run `ew2.exe`
 4. Enter your token or select 24h free trial
 
 ## Features
@@ -20,7 +20,7 @@ Discord Username Checker v3.1.0
 
 ## Offline Operation
 
-Klatom does not require internet to function. All necessary data (username lists, proxy samples, configuration) is bundled inside the executable. Internet connections are optional and used only to fetch updates if available.
+ew² does not require internet to function. All necessary data (username lists, proxy samples, configuration) is bundled inside the executable. Internet connections are optional and used only to fetch updates if available.
 
 ## System Requirements
 
@@ -29,12 +29,12 @@ Klatom does not require internet to function. All necessary data (username lists
 
 ## Data Location
 
-All data is stored in: `%LOCALAPPDATA%\Klatom\`
+All data is stored in: `%LOCALAPPDATA%\ew2\`
 
 ## Security
 
 - Single executable, no dependencies
-- Encrypted auth storage (AES + HMAC)
+- Encrypted auth storage (XOR + HMAC)
 - HWID-bound trial sessions
 - SHA-256 checksum verification
 - HTTPS for all network communications
@@ -46,7 +46,7 @@ pip install pyinstaller aiohttp rich
 build.bat
 ```
 
-Output: `dist\Klatom\Klatom.exe`
+Output: `dist\ew2\ew2.exe`
 
 ## License
 

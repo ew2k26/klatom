@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KLATOM v3.3 - Mod Panel GUI (token management, auth tools, speed test)."""
+"""ew² v4.0 - Mod Panel GUI (token management, auth tools, speed test)."""
 
 from __future__ import annotations
 
@@ -19,18 +19,18 @@ from config import DATA_DIR, VERSION
 
 # ── Colors ──
 
-BG = "#0C0C12"
-BG2 = "#15151E"
-BG3 = "#1C1C28"
-BORDER = "#2A2A35"
-TXT = "#F0F0F5"
-TXT2 = "#8888A0"
-MUTED = "#7A7A82"
+BG = "#050508"
+BG2 = "#0A0A0F"
+BG3 = "#101018"
+BORDER = "#1A1A24"
+TXT = "#E8E8ED"
+TXT2 = "#707080"
+MUTED = "#555560"
 PRIMARY = "#A855F7"
 PRIMARY_D = "#7C3AED"
-SUCCESS = "#30D158"
-DANGER = "#FF453A"
-WARNING = "#FF9F0A"
+SUCCESS = "#28C840"
+DANGER = "#E03030"
+WARNING = "#E08800"
 
 AUTH_FILE = DATA_DIR / ".auth"
 SESSION_FILE = DATA_DIR / ".session"
@@ -62,11 +62,11 @@ def _hwid() -> str:
 
 
 class ModApp(tk.Tk):
-    """KLATOM Mod Panel GUI."""
+    """ew² Mod Panel GUI."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.title("KLATOM - Mod Panel")
+        self.title("ew\u00B2 - Mod Panel")
         self.geometry("700x560")
         self.minsize(600, 480)
         self.configure(bg=BG)
@@ -93,8 +93,8 @@ class ModApp(tk.Tk):
         tf = tk.Frame(header, bg=BG2)
         tf.pack(side="left", padx=20, pady=10)
 
-        tk.Label(tf, text="KL", font=("Segoe UI", 18, "bold"), fg=PRIMARY, bg=BG2).pack(side="left")
-        tk.Label(tf, text="ATOM", font=("Segoe UI", 18, "bold"), fg=TXT, bg=BG2).pack(side="left")
+        tk.Label(tf, text="ew", font=("Segoe UI", 18, "bold"), fg=PRIMARY, bg=BG2).pack(side="left")
+        tk.Label(tf, text="\u00B2", font=("Segoe UI", 18, "bold"), fg=TXT, bg=BG2).pack(side="left")
         tk.Label(tf, text="  MOD PANEL", font=("Segoe UI", 10, "bold"), fg=WARNING, bg=BG2).pack(side="left", padx=(12, 0))
         tk.Label(tf, text=f"v{VERSION}", font=("Segoe UI", 10), fg=MUTED, bg=BG2).pack(side="left", padx=(8, 0))
 
@@ -279,7 +279,7 @@ class ModApp(tk.Tk):
         def _revoke():
             raw = self._revoke_var.get().strip()
             if not raw:
-                messagebox.showwarning("KLATOM", "Enter a token number to revoke.")
+                messagebox.showwarning("ew\u00B2", "Enter a token number to revoke.")
                 return
             try:
                 idx = int(raw) - 1
@@ -287,19 +287,19 @@ class ModApp(tk.Tk):
                     token = tokens[idx]
                     tokens.pop(idx)
                     TOKENS_FILE.write_text(json.dumps(tokens, indent=2), encoding="utf-8")
-                    messagebox.showinfo("KLATOM", f"Token revoked.\nRemaining: {len(tokens)}")
+                    messagebox.showinfo("ew\u00B2", f"Token revoked.\nRemaining: {len(tokens)}")
                     self._show_tokens()
                 else:
-                    messagebox.showwarning("KLATOM", f"Invalid number. Enter 1-{len(tokens)}.")
+                    messagebox.showwarning("ew\u00B2", f"Invalid number. Enter 1-{len(tokens)}.")
             except ValueError:
                 # Not a number - try as full token string
                 if raw in tokens:
                     tokens.remove(raw)
                     TOKENS_FILE.write_text(json.dumps(tokens, indent=2), encoding="utf-8")
-                    messagebox.showinfo("KLATOM", f"Token revoked.\nRemaining: {len(tokens)}")
+                    messagebox.showinfo("ew\u00B2", f"Token revoked.\nRemaining: {len(tokens)}")
                     self._show_tokens()
                 else:
-                    messagebox.showwarning("KLATOM", "Token not found.")
+                    messagebox.showwarning("ew\u00B2", "Token not found.")
 
         self._make_button(revoke_frame, "Revoke", DANGER, _revoke, fg="#fff", hover_bg="#CC3A30").pack(side="left")
 
@@ -381,15 +381,70 @@ class ModApp(tk.Tk):
         frame.pack(expand=True, fill="both", padx=30, pady=20)
 
         tk.Label(frame, text="Proxy Speed Test", font=("Segoe UI", 14, "bold"), fg=TXT, bg=BG, anchor="w").pack(fill="x", pady=(0, 4))
-        tk.Label(frame, text="Test proxies from data/proxies.txt", font=("Segoe UI", 9), fg=MUTED, bg=BG, anchor="w").pack(fill="x", pady=(0, 16))
+        tk.Label(frame, text="Enter proxies (one per line) or load from file", font=("Segoe UI", 9), fg=MUTED, bg=BG, anchor="w").pack(fill="x", pady=(0, 12))
 
-        proxy_file = DATA_DIR / "proxies.txt"
-        if not proxy_file.exists():
-            tk.Label(frame, text="No proxies.txt found.", font=("Segoe UI", 10), fg=DANGER, bg=BG).pack(anchor="w")
-            return
+        # Source buttons
+        src_frame = tk.Frame(frame, bg=BG)
+        src_frame.pack(fill="x", pady=(0, 8))
 
-        proxies = [p.strip() for p in proxy_file.read_text(encoding="utf-8").splitlines() if p.strip()]
-        tk.Label(frame, text=f"{len(proxies)} proxies loaded", font=("Segoe UI", 10), fg=TXT2, bg=BG, anchor="w").pack(fill="x", pady=(0, 12))
+        def _load_file():
+            from tkinter import filedialog
+            path = filedialog.askopenfilename(filetypes=[("Text", "*.txt"), ("All", "*.*")])
+            if path:
+                try:
+                    lines = [l.strip() for l in Path(path).read_text(encoding="utf-8").splitlines() if l.strip()]
+                    self._speed_text.configure(state="normal")
+                    self._speed_text.delete("1.0", "end")
+                    self._speed_text.insert("1.0", "\n".join(lines))
+                    self._speed_text.configure(state="disabled")
+                    self._speed_count_label.configure(text=f"{len(lines)} proxies loaded from file", fg=SUCCESS)
+                except Exception as e:
+                    self._speed_count_label.configure(text=f"Error: {e}", fg=DANGER)
+
+        def _load_last_scrape():
+            # Try to find last scraped proxies from proxies.txt
+            proxy_file = DATA_DIR / "proxies.txt"
+            if proxy_file.exists():
+                lines = [l.strip() for l in proxy_file.read_text(encoding="utf-8").splitlines() if l.strip()]
+                if lines:
+                    self._speed_text.configure(state="normal")
+                    self._speed_text.delete("1.0", "end")
+                    self._speed_text.insert("1.0", "\n".join(lines))
+                    self._speed_text.configure(state="disabled")
+                    self._speed_count_label.configure(text=f"{len(lines)} proxies loaded from cache", fg=SUCCESS)
+                    return
+            self._speed_count_label.configure(text="No cached proxies found", fg=WARNING)
+
+        def _clear_list():
+            self._speed_text.configure(state="normal")
+            self._speed_text.delete("1.0", "end")
+            self._speed_text.configure(state="disabled")
+            self._speed_count_label.configure(text="0 proxies", fg=MUTED)
+
+        self._make_button(src_frame, "Load File", BG3, _load_file, fg=TXT, hover_bg=BORDER).pack(side="left", padx=(0, 8))
+        self._make_button(src_frame, "Load Cache", BG3, _load_last_scrape, fg=TXT, hover_bg=BORDER).pack(side="left", padx=(0, 8))
+        self._make_button(src_frame, "Clear", BG3, _clear_list, fg=TXT, hover_bg=BORDER).pack(side="left")
+
+        # Proxy text area
+        self._speed_text = tk.Text(
+            frame, height=8, font=("Consolas", 9),
+            bg=BG3, fg=TXT, insertbackground=PRIMARY, relief="flat",
+            highlightthickness=1, highlightbackground=BORDER,
+        )
+        self._speed_text.pack(fill="x", pady=(0, 4))
+
+        self._speed_count_label = tk.Label(frame, text="0 proxies", font=("Segoe UI", 9), fg=MUTED, bg=BG, anchor="w")
+        self._speed_count_label.pack(fill="x", pady=(0, 8))
+
+        # Auto-count on change
+        def _count_proxies(*_args):
+            try:
+                raw = self._speed_text.get("1.0", "end").strip()
+                count = len([l for l in raw.splitlines() if l.strip()]) if raw else 0
+                self._speed_count_label.configure(text=f"{count} proxies", fg=SUCCESS if count > 0 else MUTED)
+            except Exception:
+                pass
+        self._speed_text.bind("<<Modified>>", _count_proxies)
 
         style = ttk.Style()
         style.theme_use("default")
@@ -403,17 +458,27 @@ class ModApp(tk.Tk):
 
         # Results
         self._speed_results = tk.Text(
-            frame, height=10, font=("Consolas", 9),
+            frame, height=8, font=("Consolas", 9),
             bg=BG3, fg=MUTED, relief="flat", state="disabled",
             highlightthickness=1, highlightbackground=BORDER,
         )
         self._speed_results.pack(fill="both", expand=True, pady=(0, 12))
 
         def _run():
+            raw = self._speed_text.get("1.0", "end").strip()
+            if not raw:
+                self.after(0, lambda: self._speed_label.configure(text="No proxies to test", fg=DANGER))
+                return
+
+            proxies = [l.strip() for l in raw.splitlines() if l.strip()]
+            if not proxies:
+                self.after(0, lambda: self._speed_label.configure(text="No proxies to test", fg=DANGER))
+                return
+
             from config import ENDPOINT
             import aiohttp
 
-            self._speed_label.configure(text="Testing...", fg=PRIMARY)
+            self.after(0, lambda: self._speed_label.configure(text=f"Testing {len(proxies)} proxies...", fg=PRIMARY))
 
             sem = asyncio.Semaphore(200)
             results = []
@@ -436,9 +501,10 @@ class ModApp(tk.Tk):
                     pass
                 async with lock:
                     tested[0] += 1
-                if tested[0] % 100 == 0 or tested[0] == len(proxies):
+                if tested[0] % 50 == 0 or tested[0] == len(proxies):
                     pct = tested[0] / max(len(proxies), 1) * 100
-                    self.after(0, lambda t=tested[0], p=pct: (
+                    t = tested[0]
+                    self.after(0, lambda t=t, p=pct: (
                         self._speed_progress.configure(value=p),
                         self._speed_label.configure(text=f"{t}/{len(proxies)} ({p:.0f}%)"),
                     ))
@@ -464,7 +530,7 @@ class ModApp(tk.Tk):
                 self._speed_results.configure(state="normal")
                 self._speed_results.delete("1.0", "end")
                 self._speed_results.insert("1.0", f"{'#':<4} {'Proxy':<35} {'Latency':<10} {'Status'}\n")
-                self._speed_results.insert("end", "─" * 65 + "\n")
+                self._speed_results.insert("end", "─" * 60 + "\n")
                 for i, (proxy, lat, status) in enumerate(results[:30], 1):
                     color = "green" if lat < 1 else "orange" if lat < 3 else "red"
                     self._speed_results.insert("end", f"{i:<4} {proxy:<35} {lat:.2f}s{' ':<4} {status}\n")
@@ -535,14 +601,14 @@ class ModApp(tk.Tk):
             tk.Label(frame, text=f"  {f.name}: {status}", font=("Consolas", 10), fg=color, bg=BG, anchor="w").pack(fill="x")
 
         def _clear():
-            if not messagebox.askyesno("KLATOM", "Are you sure you want to delete ALL auth data?"):
+            if not messagebox.askyesno("ew\u00B2", "Are you sure you want to delete ALL auth data?"):
                 return
             for f in [AUTH_FILE, SESSION_FILE]:
                 if f.exists():
                     f.unlink()
             if TOKENS_FILE.exists():
                 TOKENS_FILE.write_text("[]", encoding="utf-8")
-            messagebox.showinfo("KLATOM", "All auth data cleared.")
+            messagebox.showinfo("ew\u00B2", "All auth data cleared.")
             self._show_session()
 
         self._make_button(frame, "Clear All Auth", DANGER, _clear, fg="#fff", hover_bg="#CC3A30").pack(anchor="w", pady=(24, 0))

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KLATOM v3.2 - Configuration, constants, helpers, and data models."""
+"""ew² v4.0 - Configuration, constants, helpers, and data models."""
 
 from __future__ import annotations
 
@@ -14,12 +14,12 @@ if getattr(sys, 'frozen', False):
 else:
     PROJECT_ROOT = Path(__file__).resolve().parent
 
-APPDATA_DIR = Path.home() / "AppData" / "Local" / "Klatom"
+APPDATA_DIR = Path.home() / "AppData" / "Local" / "ew2"
 DATA_DIR = APPDATA_DIR / "data"
 LOGS_DIR = APPDATA_DIR / "logs"
 RESULTS_DIR = APPDATA_DIR / "results"
 
-VERSION = "3.3.0"
+VERSION = "4.0.0"
 ENDPOINT = "https://discord.com/api/v9/unique-username/username-attempt-unauthed"
 USERNAME_CHARS = string.ascii_lowercase + string.digits + "_" + "."
 MAX_CONCURRENCY = 2000

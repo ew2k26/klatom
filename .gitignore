@@ -5,7 +5,7 @@ dist/
 __pycache__/
 
 # Website binary (distribute separately)
-website/Klatom.exe
+website/ew2.exe
 
 # Runtime data (created by exe)
 data/
@@ -13,6 +13,4 @@ logs/
 results/
 
 # Local only
-*.ico
-*.png
 *.tmp

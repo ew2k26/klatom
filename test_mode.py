@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Klatom – Test Mode (token management, proxy speed, auth tools)."""
+"""ew² – Test Mode (token management, proxy speed, auth tools)."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ class C:
     WARNING = "#FF9F0A"
     MUTED = "#7A7A82"
 
-VERSION = "3.3.0"
+VERSION = "4.0.0"
 
 
 console = Console()
@@ -71,12 +71,9 @@ def _banner():
     from rich.text import Text
     from rich import box
     inner = Text()
-    inner.append("  ██╗  ██╗██╗      █████╗ ███╗   ██╗████████╗ ██████╗ ███╗   ███╗", style=f"bold {C.PRIMARY}")
-    inner.append("\n  ██║ ██╔╝██║     ██╔══██╗████╗  ██║╚══██╔══╝██╔═══██╗████╗ ████║", style=f"bold {C.PRIMARY}")
-    inner.append("\n  █████╔╝ ██║     ███████║██╔██╗ ██║   ██║   ██║   ██║██╔████╔██║", style=f"bold {C.PRIMARY}")
-    inner.append("\n  ██╔═██╗ ██║     ██╔══██║██║╚██╗██║   ██║   ██║   ██║██║╚██╔╝██║", style=f"bold {C.PRIMARY}")
-    inner.append("\n  ██║  ██╗███████╗██║  ██║██║ ╚████║   ██║   ╚██████╔╝██║ ╚═╝ ██║", style=f"bold {C.PRIMARY}")
-    inner.append("\n  ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝    ╚═════╝ ╚═╝     ╚═╝", style=f"bold {C.PRIMARY}")
+    inner.append("  ╔══════════════════════════════════╗", style=f"bold {C.PRIMARY}")
+    inner.append("\n  ║           ew²                    ║", style=f"bold {C.PRIMARY}")
+    inner.append("\n  ╚══════════════════════════════════╝", style=f"bold {C.PRIMARY}")
     inner.append(f"\n\n  [bold {C.WARNING}]MOD PANEL[/]", style=f"{C.WARNING}")
     inner.append(f"\n         v{VERSION}", style=f"{C.MUTED}")
     return Panel(inner, box=box.DOUBLE, border_style=C.WARNING, padding=(0, 1))

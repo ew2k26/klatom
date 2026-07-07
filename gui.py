@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KLATOM v3.3 - Modern tkinter GUI."""
+"""ew² v4.0 - Modern tkinter GUI."""
 
 from __future__ import annotations
 
@@ -22,27 +22,27 @@ from config import (
 
 # ── Color Palette ──
 
-BG = "#0C0C12"
-BG2 = "#15151E"
-BG3 = "#1C1C28"
-BORDER = "#2A2A35"
-TXT = "#F0F0F5"
-TXT2 = "#8888A0"
-MUTED = "#7A7A82"
+BG = "#050508"
+BG2 = "#0A0A0F"
+BG3 = "#101018"
+BORDER = "#1A1A24"
+TXT = "#E8E8ED"
+TXT2 = "#707080"
+MUTED = "#555560"
 PRIMARY = "#A855F7"
 PRIMARY_D = "#7C3AED"
 PRIMARY_L = "#C084FC"
-SUCCESS = "#30D158"
-DANGER = "#FF453A"
-WARNING = "#FF9F0A"
+SUCCESS = "#28C840"
+DANGER = "#E03030"
+WARNING = "#E08800"
 
 
 class App(tk.Tk):
-    """KLATOM main GUI application."""
+    """ew² main GUI application."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.title("KLATOM v" + VERSION)
+        self.title("ew² v" + VERSION)
         self.geometry("720x580")
         self.minsize(640, 500)
         self.configure(bg=BG)
@@ -93,11 +93,11 @@ class App(tk.Tk):
         title_frame.pack(side="left", padx=20, pady=10)
 
         tk.Label(
-            title_frame, text="KL", font=("Segoe UI", 18, "bold"),
+            title_frame, text="ew", font=("Segoe UI", 18, "bold"),
             fg=PRIMARY, bg=BG2,
         ).pack(side="left")
         tk.Label(
-            title_frame, text="ATOM", font=("Segoe UI", 18, "bold"),
+            title_frame, text="\u00B2", font=("Segoe UI", 18, "bold"),
             fg=TXT, bg=BG2,
         ).pack(side="left")
         tk.Label(
@@ -133,7 +133,7 @@ class App(tk.Tk):
 
         # Welcome
         tk.Label(
-            frame, text="Welcome to KLATOM", font=("Segoe UI", 16, "bold"),
+            frame, text="Welcome to ew\u00B2", font=("Segoe UI", 16, "bold"),
             fg=PRIMARY, bg=BG,
         ).pack(pady=(0, 6))
         tk.Label(
@@ -382,7 +382,7 @@ class App(tk.Tk):
 
         self._make_button(
             path_row, "Browse", BG3, self._browse_proxy_file,
-            fg=TXT, bg=BG3, hover_bg=BORDER, width=8,
+            fg=TXT, hover_bg=BORDER, width=8,
         ).pack(side="right", padx=(8, 0))
 
         # Auto-remove checkbox
@@ -606,7 +606,7 @@ class App(tk.Tk):
         ).pack(side="left", padx=(0, 10))
         self._make_button(
             btn_frame, "Skip", BG3, lambda: self._build_wizard_step(2),
-            fg=TXT, bg=BG3, hover_bg=BORDER,
+            fg=TXT, hover_bg=BORDER,
         ).pack(side="left")
 
     def _run_speed_test(self) -> None:
@@ -695,7 +695,7 @@ class App(tk.Tk):
         self._names_path_entry.pack(side="left", fill="x", expand=True, ipady=6)
         self._make_button(
             path_row, "Browse", BG3, self._browse_names_file,
-            fg=TXT, bg=BG3, hover_bg=BORDER, width=8,
+            fg=TXT, hover_bg=BORDER, width=8,
         ).pack(side="right", padx=(8, 0))
 
         # Generate options (hidden by default)
@@ -758,7 +758,7 @@ class App(tk.Tk):
                 usernames = _rand.sample(usernames, min(50000, len(usernames)))
 
         if not usernames:
-            messagebox.showwarning("KLATOM", "No usernames found or generated.")
+            messagebox.showwarning("ew\u00B2", "No usernames found or generated.")
             return
 
         self._wizard_data["usernames"] = usernames
@@ -957,18 +957,18 @@ class App(tk.Tk):
 
         self._make_button(
             btn_frame, "Start Checking", SUCCESS, self._start_checking,
-            fg="#fff", bg=SUCCESS, hover_bg="#28B84D",
+            fg="#fff", hover_bg="#28B84D",
         ).pack(side="right")
 
         self._make_button(
             btn_frame, "\u2190 Back", BG3, lambda: self._build_wizard_step(4),
-            fg=TXT, bg=BG3, hover_bg=BORDER,
+            fg=TXT, hover_bg=BORDER,
         ).pack(side="right", padx=(0, 10))
 
     def _start_checking(self) -> None:
         d = self._wizard_data
         if not d["usernames"]:
-            messagebox.showwarning("KLATOM", "No usernames to check.")
+            messagebox.showwarning("ew\u00B2", "No usernames to check.")
             return
 
         run_config = RunConfig(
@@ -1042,7 +1042,7 @@ class App(tk.Tk):
         self._stop_event = threading.Event()
         self._make_button(
             btn_frame, "Stop", DANGER, self._stop_checking,
-            fg="#fff", bg=DANGER, hover_bg="#CC3A30",
+            fg="#fff", hover_bg="#CC3A30",
         ).pack(side="right")
 
         # Start checking in background

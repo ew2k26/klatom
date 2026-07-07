@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KLATOM v3.3 - Terminal UI."""
+"""ew² v4.0 - Terminal UI."""
 
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ console = Console()
 
 def banner() -> Panel:
     inner = Text()
-    inner.append("  KL", style=f"bold {C.PRIMARY}")
-    inner.append("ATOM", style=f"bold white")
+    inner.append("  ew", style=f"bold {C.PRIMARY}")
+    inner.append("²", style=f"bold white")
     inner.append(f"  v{VERSION}", style=f"{C.MUTED}")
     return Panel(
         inner,
@@ -231,7 +231,7 @@ def live_card(
     status = f"waiting" if (ratelimited > 0 and done == 0) else f"{done}/{total} ({pct:.0f}%)"
     return Panel(
         content,
-        title=f"[{C.PRIMARY}]KLATOM[/] . {status} . [dim]{elapsed:.0f}s[/]",
+        title=f"[{C.PRIMARY}]ew²[/] . {status} . [dim]{elapsed:.0f}s[/]",
         title_align="left",
         box=box.ROUNDED,
         border_style=C.PRIMARY if not paused else C.WARNING,

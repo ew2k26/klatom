@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KLATOM v3.3 - Checker engine, circuit breaker, error aggregation, webhook."""
+"""ew² v4.0 - Checker engine, circuit breaker, error aggregation, webhook."""
 
 from __future__ import annotations
 
@@ -375,7 +375,7 @@ class WebhookSender:
 
         payload = {
             "content": msg,
-            "username": "KLATOM",
+            "username": "ew²",
             "avatar_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/95/Burning_Yellow_Sunset.jpg/1280px-Burning_Yellow_Sunset.jpg",
         }
 

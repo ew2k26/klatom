@@ -1,5 +1,5 @@
 ﻿#!/usr/bin/env python3
-"""KLATOM v3.3 - Discord username availability checker."""
+"""ew² v4.0 - Discord username availability checker."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ try:
     u = ctypes.windll.user32
     h = k.GetConsoleWindow()
     if h:
-        u.SetWindowTextW(h, "KLATOM v" + str(__import__('config').VERSION))
+        u.SetWindowTextW(h, "ew² v" + str(__import__('config').VERSION))
 except Exception:
     pass
 
@@ -84,12 +84,12 @@ from wizard import setup_wizard
 
 
 def parse_args() -> AppSettings:
-    parser = argparse.ArgumentParser(description="KLATOM - Discord username checker")
+    parser = argparse.ArgumentParser(description="ew² - Discord username checker")
     parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument("-n", "--no-wizard", action="store_true")
     parser.add_argument("-m", "--mod", action="store_true", help="Launch mod panel")
     parser.add_argument("-t", "--terminal", action="store_true", help="Use terminal UI instead of GUI")
-    parser.add_argument("--version", action="version", version=f"KLATOM v{__import__('config').VERSION}")
+    parser.add_argument("--version", action="version", version=f"ew² v{__import__('config').VERSION}")
     args = parser.parse_args()
     return AppSettings(debug=args.debug, no_wizard=args.no_wizard, mod=args.mod, terminal=args.terminal)
 

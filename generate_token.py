@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Klatom – Secure token generator (CREATOR ONLY, HWID-locked)."""
+"""ew² – Secure token generator (CREATOR ONLY, HWID-locked)."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def _check_creator() -> bool:
 # ── Token generation ────────────────────────────────────────────────────────
 def generate_token() -> str:
     import secrets
-    return f"KLATOM-{secrets.token_hex(4).upper()}-{secrets.token_hex(4).upper()}-{secrets.token_hex(4).upper()}"
+    return f"EW2-{secrets.token_hex(4).upper()}-{secrets.token_hex(4).upper()}-{secrets.token_hex(4).upper()}"
 
 
 # ── Token storage (plain text for distribution) ─────────────────────────────

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Klatom – GitHub setup tool. Creates repo structure and encrypts URL."""
+"""ew² – GitHub setup tool. Creates repo structure and encrypts URL."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def _xor(data: bytes, key: bytes) -> bytes:
 
 
 def _derive_key() -> bytes:
-    return hashlib.pbkdf2_hmac("sha256", _hwid().encode(), b"klatom-salt-v1", 100_000, dklen=32)
+    return hashlib.pbkdf2_hmac("sha256", _hwid().encode(), b"ew2-salt-v1", 100_000, dklen=32)
 
 
 def encrypt_url(url: str) -> str:
@@ -89,7 +89,7 @@ def create_repo_files(repo_path: Path) -> None:
 
 # ── Main ────────────────────────────────────────────────────────────────────
 def main() -> None:
-    print(f"\n  Klatom GitHub Setup")
+    print(f"\n  ew² GitHub Setup")
     print(f"  Your HWID: {_hwid()}\n")
 
     print("  [1] Create repo files locally")
@@ -100,7 +100,7 @@ def main() -> None:
     choice = input("  Choice: ").strip()
 
     if choice == "1":
-        path = input("  Path to create repo files: ").strip() or "klatom-repo"
+        path = input("  Path to create repo files: ").strip() or "ew2-repo"
         create_repo_files(Path(path))
 
     elif choice == "2":

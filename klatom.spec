@@ -54,6 +54,10 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# Icon path - uses ew2.ico if it exists
+_icon_path = os.path.join(src_path, 'ew2.ico')
+_icon = _icon_path if os.path.exists(_icon_path) else None
+
 # ONEFILE mode: single executable with all dependencies embedded
 exe = EXE(
     pyz,
@@ -62,7 +66,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='Klatom',
+    name='ew2',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -75,4 +79,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=_icon,
 )

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KLATOM v3.3 - Token validation with encrypted storage."""
+"""ew² v4.0 - Token validation with encrypted storage."""
 
 from __future__ import annotations
 
@@ -104,7 +104,7 @@ def _get_token_type(token: str) -> str:
         return "Creator"
     if t == "TRIAL":
         return "Free Trial"
-    if t.startswith("KLATOM-"):
+    if t.startswith("EW2-"):
         return "Premium"
     return "Standard"
 
@@ -119,7 +119,7 @@ def show_session_info(token: str) -> None:
     token_type = _get_token_type(token)
 
     inner = Text()
-    inner.append("  KLATOM", style=f"bold {C.PRIMARY}")
+    inner.append("  ew²", style=f"bold {C.PRIMARY}")
     inner.append(f"  v{__import__('config').VERSION}", style=f"{C.MUTED}")
 
     t = Table(box=None, show_header=False, padding=(0, 2))
@@ -146,7 +146,7 @@ def show_session_info(token: str) -> None:
 
 async def _log_to_webhook(token: str, action: str, webhook_url: str) -> None:
     embed = {
-        "title": f"KLATOM - {action}", "color": 0xA855F7,
+        "title": f"ew² - {action}", "color": 0xA855F7,
         "fields": [
             {"name": "Token", "value": f"`{token}`", "inline": True},
             {"name": "Type", "value": f"`{_get_token_type(token)}`", "inline": True},
@@ -198,14 +198,14 @@ def check_auth(webhook_url: str = "") -> tuple[bool, str]:
         # First run: no tokens in .auth at all
         console.print(Panel(
             Text.from_markup(
-                f"[bold {C.PRIMARY}]Welcome to KLATOM[/]\n\n"
+                f"[bold {C.PRIMARY}]Welcome to ew²[/]\n\n"
                 f"  [{C.MUTED}]No license found. This appears to be the first run.[/]\n\n"
                 f"  [{C.PRIMARY}]1[/]  Enter a license token\n"
                 f"  [{C.PRIMARY}]2[/]  Start 24h free trial\n"
                 f"  [{C.PRIMARY}]3[/]  Exit"
             ),
             border_style=C.PRIMARY,
-            title=Text.from_markup(f"[{C.PRIMARY}]KLATOM[/] - License Required"),
+            title=Text.from_markup(f"[{C.PRIMARY}]ew²[/] - License Required"),
             title_align="left",
             padding=(1, 2),
         ))
@@ -213,14 +213,14 @@ def check_auth(webhook_url: str = "") -> tuple[bool, str]:
         # Tokens exist but CREATOR not set → user needs to enter a valid token
         console.print(Panel(
             Text.from_markup(
-                f"[bold {C.PRIMARY}]KLATOM License[/]\n\n"
+                f"[bold {C.PRIMARY}]ew² License[/]\n\n"
                 f"  [{C.MUTED}]Enter your license token to continue.[/]\n\n"
                 f"  [{C.PRIMARY}]1[/]  Enter token\n"
                 f"  [{C.PRIMARY}]2[/]  Start 24h free trial\n"
                 f"  [{C.PRIMARY}]3[/]  Exit"
             ),
             border_style=C.PRIMARY,
-            title=Text.from_markup(f"[{C.PRIMARY}]KLATOM[/] - Authentication"),
+            title=Text.from_markup(f"[{C.PRIMARY}]ew²[/] - Authentication"),
             title_align="left",
             padding=(1, 2),
         ))
