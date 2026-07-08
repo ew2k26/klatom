@@ -1,7 +1,8 @@
 # Build artifacts
 build/
 dist/
-*.spec
+!klatom.spec
+!ew2mod.spec
 __pycache__/
 
 # Website binary (distribute separately)
