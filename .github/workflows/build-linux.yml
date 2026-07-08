@@ -9,6 +9,9 @@ on:
         description: 'Release tag (e.g. v4.0.0)'
         required: true
 
+permissions:
+  contents: write
+
 jobs:
   build-linux:
     runs-on: ubuntu-latest
@@ -51,12 +54,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show environment
-        run: |
-          echo "Working directory: $(pwd)"
-          echo "Python: $(which python3) ($(python3 --version 2>&1))"
-          echo "Files: $(ls *.spec 2>/dev/null || echo 'NO SPEC FILES')"
-
       - name: Install dependencies
         run: |
           pip3 install --break-system-packages pyinstaller aiohttp rich pydantic 2>/dev/null || \
@@ -70,46 +67,24 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: python3 -m PyInstaller ew2mod.spec --clean --noconfirm
 
-      - name: Package for ${{ matrix.distro }}
+      - name: Package
         working-directory: ${{ github.workspace }}
         run: |
           VER="${GITHUB_REF_NAME:-dev}"
           VER="${VER#v}"
-          BIN_DIR="pkg-staging/usr/bin"
-          ICON_DIR="pkg-staging/usr/share/icons/hicolor/256x256/apps"
-          DESKTOP_DIR="pkg-staging/usr/share/applications"
-
-          mkdir -p "$BIN_DIR" "$ICON_DIR" "$DESKTOP_DIR"
-          cp dist/ew2 "$BIN_DIR/ew2"
-          cp dist/ew2-Mod "$BIN_DIR/ew2-Mod"
-          chmod 755 "$BIN_DIR/ew2" "$BIN_DIR/ew2-Mod"
-          cp ew2.ico "$ICON_DIR/ew2.png" 2>/dev/null || true
-
-          cat > "$DESKTOP_DIR/ew2.desktop" <<DESK
-          [Desktop Entry]
-          Name=ew2
-          Comment=ew2 Discord Username Checker
-          Exec=ew2
-          Icon=ew2
-          Terminal=true
-          Type=Application
-          Categories=Utility;
-          DESK
+          mkdir -p pkg-staging/usr/bin
+          mkdir -p pkg-staging/usr/share/icons/hicolor/256x256/apps
+          mkdir -p pkg-staging/usr/share/applications
+          cp dist/ew2 pkg-staging/usr/bin/ew2
+          cp dist/ew2-Mod pkg-staging/usr/bin/ew2-Mod
+          chmod 755 pkg-staging/usr/bin/ew2 pkg-staging/usr/bin/ew2-Mod
+          cp ew2.ico pkg-staging/usr/share/icons/hicolor/256x256/apps/ew2.png 2>/dev/null || true
+          printf '[Desktop Entry]\nName=ew2\nComment=ew2 Discord Username Checker\nExec=ew2\nIcon=ew2\nTerminal=true\nType=Application\nCategories=Utility;\n' > pkg-staging/usr/share/applications/ew2.desktop
 
           case "${{ matrix.distro }}" in
             ubuntu|debian)
               mkdir -p pkg-deb/DEBIAN
-              cat > pkg-deb/DEBIAN/control <<EOF
-              Package: ew2
-              Version: $VER
-              Section: utils
-              Priority: optional
-              Architecture: amd64
-              Depends: python3 (>= 3.10), python3-tk
-              Maintainer: ew2 <noreply@ew2-26c.pages.dev>
-              Description: ew2 Discord Username Checker
-               High-performance name checker with 17+ proxy sources.
-              EOF
+              printf 'Package: ew2\nVersion: %s\nSection: utils\nPriority: optional\nArchitecture: amd64\nDepends: python3 (>= 3.10), python3-tk\nMaintainer: ew2 <noreply@ew2-26c.pages.dev>\nDescription: ew2 Discord Username Checker\n High-performance name checker with 17+ proxy sources.\n' "$VER" > pkg-deb/DEBIAN/control
               cp -r pkg-staging/* pkg-deb/
               dpkg-deb --build pkg-deb "ew2_${VER}_amd64.deb"
               echo "ASSET=ew2_${VER}_amd64.deb" >> $GITHUB_ENV
@@ -119,44 +94,13 @@ jobs:
               cp dist/ew2 pkg-arch/usr/bin/ew2
               cp dist/ew2-Mod pkg-arch/usr/bin/ew2-Mod
               chmod 755 pkg-arch/usr/bin/ew2 pkg-arch/usr/bin/ew2-Mod
-              cat > pkg-arch/PKGINFO <<EOF
-              pkgname = ew2
-              pkgver = $VER
-              pkgdesc = ew2 Discord Username Checker
-              url = https://production.ew2-26c.pages.dev
-              arch = x86_64
-              license = custom
-              depends = python
-              depends = tk
-              EOF
-              tar --zstd -cf "ew2-${VER}-x86_64.pkg.tar.zst" pkg-arch/ 2>/dev/null || \
-              tar -cf "ew2-${VER}-x86_64.pkg.tar.zst" pkg-arch/
+              printf 'pkgname = ew2\npkgver = %s\npkgdesc = ew2 Discord Username Checker\nurl = https://production.ew2-26c.pages.dev\narch = x86_64\nlicense = custom\ndepends = python\ndepends = tk\n' "$VER" > pkg-arch/PKGINFO
+              tar --zstd -cf "ew2-${VER}-x86_64.pkg.tar.zst" pkg-arch/ 2>/dev/null || tar -cf "ew2-${VER}-x86_64.pkg.tar.zst" pkg-arch/
               echo "ASSET=ew2-${VER}-x86_64.pkg.tar.zst" >> $GITHUB_ENV
               ;;
             fedora)
-              cat > ew2.spec <<EOF
-              Name: ew2
-              Version: $VER
-              Release: 1
-              Summary: ew2 Discord Username Checker
-              License: Custom
-              Source0: ew2
-              Requires: python3
-              Requires: python3-tkinter
-              %description
-              High-performance name checker with 17+ proxy sources.
-              %install
-              mkdir -p %{buildroot}/usr/bin
-              cp ew2 %{buildroot}/usr/bin/ew2
-              cp ew2-Mod %{buildroot}/usr/bin/ew2-Mod
-              chmod 755 %{buildroot}/usr/bin/ew2 %{buildroot}/usr/bin/ew2-Mod
-              %files
-              /usr/bin/ew2
-              /usr/bin/ew2-Mod
-              EOF
-              rpmbuild -bb ew2.spec --define "_topdir $(pwd)/rpm" --define "_sourcedir $(pwd)" 2>/dev/null || \
-              rpmbuild -bb ew2.spec --define "_topdir $(pwd)/rpm" 2>/dev/null || \
-              echo "RPM build skipped (mock not available)"
+              printf 'Name: ew2\nVersion: %s\nRelease: 1\nSummary: ew2 Discord Username Checker\nLicense: Custom\nSource0: ew2\nRequires: python3\nRequires: python3-tkinter\n%%%%description\nHigh-performance name checker with 17+ proxy sources.\n%%%%install\nmkdir -p %%%%{buildroot}/usr/bin\ncp ew2 %%%%{buildroot}/usr/bin/ew2\ncp ew2-Mod %%%%{buildroot}/usr/bin/ew2-Mod\nchmod 755 %%%%{buildroot}/usr/bin/ew2 %%%%{buildroot}/usr/bin/ew2-Mod\n%%%%files\n/usr/bin/ew2\n/usr/bin/ew2-Mod\n' "$VER" > ew2.spec
+              rpmbuild -bb ew2.spec --define "_topdir $(pwd)/rpm" --define "_sourcedir $(pwd)" 2>/dev/null || echo "RPM build skipped"
               echo "ASSET=ew2-${VER}-1.x86_64.rpm" >> $GITHUB_ENV
               ;;
             alpine)
@@ -164,7 +108,6 @@ jobs:
               cp dist/ew2 pkg-apk/usr/bin/ew2
               cp dist/ew2-Mod pkg-apk/usr/bin/ew2-Mod
               chmod 755 pkg-apk/usr/bin/ew2 pkg-apk/usr/bin/ew2-Mod
-              tar -zcf "ew2-${VER}-r0.apk" pkg-apk/ 2>/dev/null || \
               tar -czf "ew2-${VER}-r0.apk" pkg-apk/
               echo "ASSET=ew2-${VER}-r0.apk" >> $GITHUB_ENV
               ;;
@@ -174,11 +117,9 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           echo "## ${{ matrix.distro }}" >> checksums.txt
-          sha256sum dist/ew2 dist/ew2-Mod >> checksums.txt 2>/dev/null || \
-          shasum -a 256 dist/ew2 dist/ew2-Mod >> checksums.txt 2>/dev/null
+          sha256sum dist/ew2 dist/ew2-Mod >> checksums.txt 2>/dev/null || shasum -a 256 dist/ew2 dist/ew2-Mod >> checksums.txt 2>/dev/null
           if [ -n "${{ env.ASSET }}" ] && [ -f "${{ env.ASSET }}" ]; then
-            sha256sum "${{ env.ASSET }}" >> checksums.txt 2>/dev/null || \
-            shasum -a 256 "${{ env.ASSET }}" >> checksums.txt 2>/dev/null
+            sha256sum "${{ env.ASSET }}" >> checksums.txt 2>/dev/null || shasum -a 256 "${{ env.ASSET }}" >> checksums.txt 2>/dev/null
           fi
 
       - name: Upload binaries
@@ -209,24 +150,20 @@ jobs:
     runs-on: ubuntu-latest
     container: python:3.14-slim
 
+    permissions:
+      contents: write
+
     steps:
       - name: Install system deps
         run: |
           apt-get update -qq
-          apt-get install -y -qq python3-tk git curl binutils upx-ucl 2>/dev/null || \
-          apt-get install -y -qq python3-tk git curl binutils
+          apt-get install -y -qq python3-tk git curl binutils 2>/dev/null || true
 
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install Python deps
         run: pip install pyinstaller aiohttp rich pydantic
-
-      - name: Show environment
-        run: |
-          echo "Working directory: $(pwd)"
-          echo "Python: $(which python) ($(python --version 2>&1))"
-          echo "Files: $(ls *.spec 2>/dev/null || echo 'NO SPEC FILES')"
 
       - name: Build ew2
         working-directory: ${{ github.workspace }}
@@ -246,20 +183,7 @@ jobs:
           cp dist/ew2 "ew2-${VER}-linux-x86_64/ew2"
           cp dist/ew2-Mod "ew2-${VER}-linux-x86_64/ew2-Mod"
           chmod 755 "ew2-${VER}-linux-x86_64/ew2" "ew2-${VER}-linux-x86_64/ew2-Mod"
-          cat > "ew2-${VER}-linux-x86_64/README.txt" <<EOF
-          ew2 v${VER} - Linux x86_64
-
-          Requirements:
-            - Python 3.10+
-            - python3-tk (Debian/Ubuntu: sudo apt install python3-tk)
-            - Or just run the binary directly (all deps bundled)
-
-          Quick start:
-            chmod +x ew2
-            ./ew2
-
-          Discord: https://discord.gg/7qHmtRbSWV
-          EOF
+          printf 'ew2 v%s - Linux x86_64\n\nRequirements:\n  - Python 3.10+\n  - python3-tk (Debian/Ubuntu: sudo apt install python3-tk)\n  - Or just run the binary directly (all deps bundled)\n\nQuick start:\n  chmod +x ew2\n  ./ew2\n\nDiscord: https://discord.gg/7qHmtRbSWV\n' "$VER" > "ew2-${VER}-linux-x86_64/README.txt"
           tar -czf "$TARBALL" "ew2-${VER}-linux-x86_64/"
 
       - name: Upload universal tarball
