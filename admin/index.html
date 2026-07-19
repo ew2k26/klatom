@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ew² Admin</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:system-ui,sans-serif;background:#050508;color:#C8C8D0;padding:40px;max-width:1000px;margin:0 auto}
+        h1{font-size:1.5rem;margin-bottom:8px;color:#E0E0E8}
+        .sub{color:#585868;font-size:.85rem;margin-bottom:24px}
+        .login{background:#0A0A0E;border:1px solid #16161E;border-radius:12px;padding:32px;max-width:360px;margin:100px auto 0}
+        .login h2{margin-bottom:16px;font-size:1.1rem;color:#D0D0D8}
+        input,select{width:100%;padding:12px;border:1px solid #16161E;border-radius:8px;background:#050508;color:#C8C8D0;font-size:.92rem;margin-bottom:12px;outline:none}
+        input:focus,select:focus{border-color:#3A3A44}
+        button{padding:12px 24px;background:#2A2A32;color:#E0E0E8;border:1px solid #16161E;border-radius:8px;font-size:.92rem;cursor:pointer;font-weight:600}
+        button:hover{background:#202028}
+        button:disabled{opacity:.5;cursor:not-allowed}
+        .btn-success{background:#28C840;border-color:#28C840;color:#fff}
+        .btn-success:hover{background:#22A838}
+        .btn-danger{background:#E03030;border-color:#E03030;color:#fff}
+        .btn-small{padding:6px 14px;font-size:.8rem}
+        table{width:100%;border-collapse:collapse;margin-top:20px}
+        th,td{text-align:left;padding:12px;border-bottom:1px solid #16161E;font-size:.85rem}
+        th{color:#585868;font-size:.75rem;text-transform:uppercase;letter-spacing:1px}
+        td{color:#C8C8D0}
+        .status{padding:4px 10px;border-radius:12px;font-size:.75rem;font-weight:600;display:inline-block}
+        .status-pending{background:rgba(232,136,0,.1);color:#E08800}
+        .status-paid{background:rgba(40,200,64,.1);color:#28C840}
+        .status-expired{background:rgba(100,100,120,.1);color:#808890}
+        .token{font-family:monospace;color:#A855F7;font-size:.82rem}
+        .refresh{margin-left:12px;background:transparent;color:#585868;border:1px solid #16161E}
+        .empty{text-align:center;padding:40px;color:#585868}
+        .tabs{display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid #16161E;padding-bottom:12px}
+        .tab{padding:8px 16px;border-radius:8px 8px 0 0;cursor:pointer;color:#585868;font-size:.85rem;font-weight:600}
+        .tab:hover{color:#C8C8D0;background:#0A0A0E}
+        .tab.active{color:#E0E0E8;background:#16161E}
+        .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+        .stat-card{background:#0A0A0E;border:1px solid #16161E;border-radius:8px;padding:16px}
+        .stat-value{font-size:1.5rem;color:#E0E0E8;font-weight:700}
+        .stat-label{font-size:.75rem;color:#585868;margin-top:4px}
+        .form-row{display:flex;gap:12px;margin-bottom:12px}
+        .form-row input,.form-row select{flex:1}
+    </style>
+</head>
+<body>
+    <div id="login-screen" class="login">
+        <h2>ew² Admin</h2>
+        <p style="color:#585868;font-size:.85rem;margin-bottom:20px">Enter your admin token to continue.</p>
+        <input type="password" id="admin-token" placeholder="Admin token">
+        <button id="login-btn" onclick="doLogin()">Login</button>
+        <p id="login-error" style="color:#E03030;font-size:.8rem;margin-top:10px;display:none"></p>
+    </div>
+
+    <div id="dashboard" style="display:none">
+        <h1>ew² Admin Dashboard</h1>
+        <p class="sub">Manage payments, coupons, and licenses.</p>
+
+        <div class="stats" id="stats-grid">
+            <div class="stat-card"><div class="stat-value" id="stat-payments">0</div><div class="stat-label">Payments</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-revenue">$0.00</div><div class="stat-label">Revenue</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-licenses">0</div><div class="stat-label">Licenses</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-pending">0</div><div class="stat-label">Pending</div></div>
+        </div>
+
+        <div class="tabs" id="tabs-bar">
+            <div class="tab active" onclick="switchTab('checkouts',this)">Checkouts</div>
+            <div class="tab" onclick="switchTab('payments',this)">Payments</div>
+            <div class="tab" onclick="switchTab('licenses',this)">Licenses</div>
+            <div class="tab" onclick="switchTab('coupons',this)">Coupons</div>
+        </div>
+
+        <div id="tab-checkouts">
+            <div style="display:flex;gap:10px;margin-bottom:10px">
+                <button class="refresh" onclick="loadCheckouts()">Refresh</button>
+                <span id="checkout-count" style="color:#585868;font-size:.85rem;line-height:40px"></span>
+            </div>
+            <table>
+                <thead><tr><th>Email</th><th>Amount</th><th>Status</th><th>Created</th><th>Token</th><th>Action</th></tr></thead>
+                <tbody id="checkouts-body"><tr><td colspan="6" class="empty">No checkouts yet.</td></tr></tbody>
+            </table>
+        </div>
+
+        <div id="tab-payments" style="display:none">
+            <div style="display:flex;gap:10px;margin-bottom:10px">
+                <button class="refresh" onclick="loadPayments()">Refresh</button>
+                <span id="payment-count" style="color:#585868;font-size:.85rem;line-height:40px"></span>
+            </div>
+            <table>
+                <thead><tr><th>Email</th><th>Amount</th><th>Status</th><th>Created</th></tr></thead>
+                <tbody id="payments-body"><tr><td colspan="4" class="empty">No payments yet.</td></tr></tbody>
+            </table>
+        </div>
+
+        <div id="tab-licenses" style="display:none">
+            <div style="display:flex;gap:10px;margin-bottom:10px">
+                <button class="refresh" onclick="loadLicenses()">Refresh</button>
+                <span id="license-count" style="color:#585868;font-size:.85rem;line-height:40px"></span>
+            </div>
+            <table>
+                <thead><tr><th>Email</th><th>Token</th><th>Activated</th><th>Created</th></tr></thead>
+                <tbody id="licenses-body"><tr><td colspan="4" class="empty">No licenses yet.</td></tr></tbody>
+            </table>
+        </div>
+
+        <div id="tab-coupons" style="display:none">
+            <div style="display:flex;gap:10px;margin-bottom:10px">
+                <button class="btn-success btn-small" onclick="showAddCoupon()">+ Add Coupon</button>
+                <button class="refresh" onclick="loadCoupons()">Refresh</button>
+                <span id="coupon-count" style="color:#585868;font-size:.85rem;line-height:40px"></span>
+            </div>
+            <table>
+                <thead><tr><th>Code</th><th>Type</th><th>Value</th><th>Uses</th><th>Expires</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody id="coupons-body"><tr><td colspan="7" class="empty">No coupons yet.</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="coupon-modal-bg" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.8);z-index:100;align-items:center;justify-content:center">
+        <div style="background:#0A0A0E;border:1px solid #16161E;border-radius:12px;padding:24px;max-width:400px;width:90%">
+            <h3 style="margin-bottom:16px;color:#E0E0E8">Add Coupon</h3>
+            <input type="text" id="coupon-code" placeholder="Code (e.g. SUMMER10)">
+            <div class="form-row">
+                <select id="coupon-type">
+                    <option value="percent">Percent (%)</option>
+                    <option value="fixed">Fixed ($)</option>
+                </select>
+                <input type="number" id="coupon-value" placeholder="Value" min="1">
+            </div>
+            <div class="form-row">
+                <input type="number" id="coupon-min-order" placeholder="Min order ($)" min="0">
+                <input type="number" id="coupon-max-uses" placeholder="Max uses" min="0">
+            </div>
+            <input type="datetime-local" id="coupon-expires">
+            <div style="display:flex;gap:10px;margin-top:16px">
+                <button class="btn-success" onclick="addCoupon()">Create</button>
+                <button onclick="hideAddCoupon()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    var API_URL = "https://ew2-payment.thiagoperres96.workers.dev";
+    var ADMIN_TOKEN = "";
+
+    function showLoginError(msg) {
+        var el = document.getElementById('login-error');
+        el.textContent = msg;
+        el.style.display = 'block';
+    }
+
+    function hideLoginError() {
+        document.getElementById('login-error').style.display = 'none';
+    }
+
+    async function doLogin() {
+        ADMIN_TOKEN = document.getElementById('admin-token').value.trim();
+        if (!ADMIN_TOKEN) { showLoginError("Enter a token"); return; }
+
+        var btn = document.getElementById('login-btn');
+        btn.textContent = 'Loading...';
+        btn.disabled = true;
+        hideLoginError();
+
+        try {
+            var resp = await fetch(API_URL + '/api/admin/stats', {
+                headers: { 'Authorization': 'Bearer ' + ADMIN_TOKEN }
+            });
+            var data = await resp.json();
+
+            if (resp.status === 401 || !data.success) {
+                showLoginError(data.error || "Invalid token");
+                btn.textContent = 'Login';
+                btn.disabled = false;
+                return;
+            }
+
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+
+            document.getElementById('stat-payments').textContent = data.stats.total_payments;
+            document.getElementById('stat-revenue').textContent = '$' + (data.stats.total_revenue_cents / 100).toFixed(2);
+            document.getElementById('stat-licenses').textContent = data.stats.total_licenses;
+            document.getElementById('stat-pending').textContent = data.stats.pending_checkouts;
+
+            loadCheckouts();
+        } catch(e) {
+            showLoginError('Network error');
+            btn.textContent = 'Login';
+            btn.disabled = false;
+        }
+    }
+
+    function switchTab(tab, el) {
+        document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+        el.classList.add('active');
+        document.getElementById('tab-checkouts').style.display = 'none';
+        document.getElementById('tab-payments').style.display = 'none';
+        document.getElementById('tab-licenses').style.display = 'none';
+        document.getElementById('tab-coupons').style.display = 'none';
+        document.getElementById('tab-' + tab).style.display = 'block';
+        if (tab === 'checkouts') loadCheckouts();
+        else if (tab === 'payments') loadPayments();
+        else if (tab === 'licenses') loadLicenses();
+        else if (tab === 'coupons') loadCoupons();
+    }
+
+    function renderCheckouts(checkouts) {
+        var tbody = document.getElementById('checkouts-body');
+        document.getElementById('checkout-count').textContent = checkouts.length + ' checkout(s)';
+        if (!checkouts.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty">No checkouts yet.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = checkouts.map(function(c) {
+            var statusClass = c.status === 'paid' ? 'status-paid' : 'status-pending';
+            var action = c.status === 'pending'
+                ? '<button class="btn-success btn-small" onclick="confirmPix(\'' + c.id + '\')">Confirm</button>'
+                : '<span style="color:#28C840;font-size:.8rem">Paid</span>';
+            var token = c.token ? '<span class="token">' + c.token + '</span>' : '-';
+            return '<tr><td>' + c.email + '</td><td>$' + c.amount_usd + '</td><td><span class="status ' + statusClass + '">' + c.status + '</span></td><td>' + new Date(c.created_at).toLocaleString() + '</td><td>' + token + '</td><td>' + action + '</td></tr>';
+        }).join('');
+    }
+
+    async function loadCheckouts() {
+        try {
+            var resp = await fetch(API_URL + '/api/admin/checkouts', {
+                headers: { 'Authorization': 'Bearer ' + ADMIN_TOKEN }
+            });
+            var data = await resp.json();
+            if (data.success) renderCheckouts(data.checkouts);
+        } catch(e) {}
+    }
+
+    async function loadPayments() {
+        try {
+            var resp = await fetch(API_URL + '/api/admin/payments', {
+                headers: { 'Authorization': 'Bearer ' + ADMIN_TOKEN }
+            });
+            var data = await resp.json();
+            if (!data.success) return;
+            document.getElementById('payment-count').textContent = data.payments.length + ' payment(s)';
+            document.getElementById('payments-body').innerHTML = data.payments.length
+                ? data.payments.map(function(p) {
+                    return '<tr><td>' + p.email + '</td><td>$' + (p.amount / 100).toFixed(2) + '</td><td><span class="status status-paid">' + p.status + '</span></td><td>' + new Date(p.created_at).toLocaleString() + '</td></tr>';
+                }).join('')
+                : '<tr><td colspan="4" class="empty">No payments yet.</td></tr>';
+        } catch(e) {}
+    }
+
+    async function loadLicenses() {
+        try {
+            var resp = await fetch(API_URL + '/api/admin/licenses', {
+                headers: { 'Authorization': 'Bearer ' + ADMIN_TOKEN }
+            });
+            var data = await resp.json();
+            if (!data.success) return;
+            document.getElementById('license-count').textContent = data.licenses.length + ' license(s)';
+            document.getElementById('licenses-body').innerHTML = data.licenses.length
+                ? data.licenses.map(function(l) {
+                    var actClass = l.activated ? 'status-paid' : 'status-pending';
+                    return '<tr><td>' + l.email + '</td><td><span class="token">' + l.token + '</span></td><td><span class="status ' + actClass + '">' + (l.activated ? 'Yes' : 'No') + '</span></td><td>' + new Date(l.created_at).toLocaleString() + '</td></tr>';
+                }).join('')
+                : '<tr><td colspan="4" class="empty">No licenses yet.</td></tr>';
+        } catch(e) {}
+    }
+
+    async function loadCoupons() {
+        try {
+            var resp = await fetch(API_URL + '/api/admin/coupons', {
+                headers: { 'Authorization': 'Bearer ' + ADMIN_TOKEN }
+            });
+            var data = await resp.json();
+            if (!data.success) return;
+            document.getElementById('coupon-count').textContent = data.coupons.length + ' coupon(s)';
+            document.getElementById('coupons-body').innerHTML = data.coupons.length
+                ? data.coupons.map(function(c) {
+                    var statusClass = c.active ? 'status-paid' : 'status-expired';
+                    var val = c.type === 'percent' ? c.value + '%' : '$' + (c.value / 100).toFixed(2);
+                    var expires = c.expires_at ? new Date(c.expires_at).toLocaleDateString() : 'Never';
+                    var uses = (c.used || 0) + (c.max_uses ? '/' + c.max_uses : '/\u221E');
+                    return '<tr><td style="font-weight:700">' + c.code + '</td><td>' + c.type + '</td><td>' + val + '</td><td>' + uses + '</td><td>' + expires + '</td><td><span class="status ' + statusClass + '">' + (c.active ? 'Active' : 'Inactive') + '</span></td><td><button class="btn-danger btn-small" onclick="deleteCoupon(\'' + c.code + '\')">Delete</button></td></tr>';
+                }).join('')
+                : '<tr><td colspan="7" class="empty">No coupons yet.</td></tr>';
+        } catch(e) {}
+    }
+
+    async function confirmPix(checkoutId) {
+        if (!confirm('Confirm Pix payment for this checkout?')) return;
+        try {
+            var resp = await fetch(API_URL + '/webhook/pix-confirm', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + ADMIN_TOKEN },
+                body: JSON.stringify({ checkout_id: checkoutId })
+            });
+            var data = await resp.json();
+            if (data.success) {
+                alert('Token issued!\n\nToken: ' + data.token);
+                loadCheckouts();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch(e) {
+            alert('Network error');
+        }
+    }
+
+    function showAddCoupon() { document.getElementById('coupon-modal-bg').style.display = 'flex'; }
+    function hideAddCoupon() { document.getElementById('coupon-modal-bg').style.display = 'none'; }
+
+    async function addCoupon() {
+        var code = document.getElementById('coupon-code').value.trim();
+        var type = document.getElementById('coupon-type').value;
+        var value = parseFloat(document.getElementById('coupon-value').value);
+        var minOrder = parseFloat(document.getElementById('coupon-min-order').value) || 0;
+        var maxUses = parseInt(document.getElementById('coupon-max-uses').value) || null;
+        var expires = document.getElementById('coupon-expires').value;
+
+        if (!code || !value) { alert('Code and value required'); return; }
+
+        try {
+            var resp = await fetch(API_URL + '/api/admin/coupons', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + ADMIN_TOKEN },
+                body: JSON.stringify({ code: code, type: type, value: type === 'fixed' ? Math.round(value * 100) : value, min_order_usd: minOrder, max_uses: maxUses, expires_at: expires ? new Date(expires).toISOString() : null })
+            });
+            var data = await resp.json();
+            if (data.success) {
+                hideAddCoupon();
+                loadCoupons();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch(e) {
+            alert('Network error');
+        }
+    }
+
+    async function deleteCoupon(code) {
+        if (!confirm('Delete coupon ' + code + '?')) return;
+        try {
+            await fetch(API_URL + '/api/admin/coupons/' + code, {
+                method: 'DELETE',
+                headers: { 'Authorization': 'Bearer ' + ADMIN_TOKEN }
+            });
+            loadCoupons();
+        } catch(e) {}
+    }
+
+    document.getElementById('admin-token').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') doLogin();
+    });
+    </script>
+</body>
+</html>

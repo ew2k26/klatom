@@ -1,0 +1,57 @@
+# Build artifacts
+build/
+dist/
+!klatom.spec
+!ew2mod.spec
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.eggs/
+*.egg-info/
+*.egg
+
+# Virtual environments
+env/
+venv/
+.venv/
+ENV/
+
+# Environment files (secrets!)
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Website binary (distribute separately)
+website/ew2.exe
+website/Klatom.exe
+website/checksums-github.txt
+
+# Runtime data (created by exe)
+data/
+logs/
+results/
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# Wrangler
+.wrangler/

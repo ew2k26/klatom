@@ -1,0 +1,212 @@
+name: Build Linux
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v4.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: ubuntu
+            container: ubuntu:24.04
+          - distro: debian
+            container: debian:bookworm
+          - distro: arch
+            container: archlinux:latest
+          - distro: fedora
+            container: fedora:40
+          - distro: alpine
+            container: alpine:3.20
+
+    container: ${{ matrix.container }}
+
+    steps:
+      - name: Prepare container
+        run: |
+          case "${{ matrix.distro }}" in
+            ubuntu|debian)
+              apt-get update -qq
+              apt-get install -y -qq python3 python3-pip python3-venv python3-tk git curl ca-certificates binutils
+              ;;
+            arch)
+              pacman -Sy --noconfirm python python-pip tk git curl base-devel
+              ;;
+            fedora)
+              dnf install -y python3 python3-pip python3-tkinter git curl binutils
+              ;;
+            alpine)
+              apk add --no-cache python3 py3-pip tk git curl binutils
+              ;;
+          esac
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          pip3 install --break-system-packages pyinstaller aiohttp rich pydantic 2>/dev/null || \
+          pip3 install pyinstaller aiohttp rich pydantic
+
+      - name: Build ew2
+        working-directory: ${{ github.workspace }}
+        run: python3 -m PyInstaller klatom.spec --clean --noconfirm
+
+      - name: Build ew2-Mod
+        working-directory: ${{ github.workspace }}
+        run: python3 -m PyInstaller ew2mod.spec --clean --noconfirm
+
+      - name: Package
+        working-directory: ${{ github.workspace }}
+        run: |
+          VER="${{ inputs.tag || github.ref_name || '4.0.0' }}"
+          VER="${VER#v}"
+          mkdir -p pkg-staging/usr/bin
+          mkdir -p pkg-staging/usr/share/icons/hicolor/256x256/apps
+          mkdir -p pkg-staging/usr/share/applications
+          cp dist/ew2 pkg-staging/usr/bin/ew2
+          cp dist/ew2-Mod pkg-staging/usr/bin/ew2-Mod
+          chmod 755 pkg-staging/usr/bin/ew2 pkg-staging/usr/bin/ew2-Mod
+          cp ew2.ico pkg-staging/usr/share/icons/hicolor/256x256/apps/ew2.png 2>/dev/null || true
+          printf '[Desktop Entry]\nName=ew2\nComment=ew2 Discord Username Checker\nExec=ew2\nIcon=ew2\nTerminal=true\nType=Application\nCategories=Utility;\n' > pkg-staging/usr/share/applications/ew2.desktop
+
+          case "${{ matrix.distro }}" in
+            ubuntu|debian)
+              mkdir -p pkg-deb/DEBIAN
+              printf 'Package: ew2\nVersion: %s\nSection: utils\nPriority: optional\nArchitecture: amd64\nDepends: python3 (>= 3.10), python3-tk\nMaintainer: ew2 <noreply@ew2-26c.pages.dev>\nDescription: ew2 Discord Username Checker\n High-performance name checker with 17+ proxy sources.\n' "$VER" > pkg-deb/DEBIAN/control
+              cp -r pkg-staging/* pkg-deb/
+              dpkg-deb --build pkg-deb "ew2_${VER}_amd64.deb"
+              echo "ASSET=ew2_${VER}_amd64.deb" >> $GITHUB_ENV
+              ;;
+            arch)
+              mkdir -p pkg-arch/usr/bin pkg-arch/usr/share/applications
+              cp dist/ew2 pkg-arch/usr/bin/ew2
+              cp dist/ew2-Mod pkg-arch/usr/bin/ew2-Mod
+              chmod 755 pkg-arch/usr/bin/ew2 pkg-arch/usr/bin/ew2-Mod
+              printf 'pkgname = ew2\npkgver = %s\npkgdesc = ew2 Discord Username Checker\nurl = https://production.ew2-26c.pages.dev\narch = x86_64\nlicense = custom\ndepends = python\ndepends = tk\n' "$VER" > pkg-arch/PKGINFO
+              tar --zstd -cf "ew2-${VER}-x86_64.pkg.tar.zst" pkg-arch/ 2>/dev/null || tar -cf "ew2-${VER}-x86_64.pkg.tar.zst" pkg-arch/
+              echo "ASSET=ew2-${VER}-x86_64.pkg.tar.zst" >> $GITHUB_ENV
+              ;;
+            fedora)
+              printf 'Name: ew2\nVersion: %s\nRelease: 1\nSummary: ew2 Discord Username Checker\nLicense: Custom\nSource0: ew2\nRequires: python3\nRequires: python3-tkinter\n%%%%description\nHigh-performance name checker with 17+ proxy sources.\n%%%%install\nmkdir -p %%%%{buildroot}/usr/bin\ncp ew2 %%%%{buildroot}/usr/bin/ew2\ncp ew2-Mod %%%%{buildroot}/usr/bin/ew2-Mod\nchmod 755 %%%%{buildroot}/usr/bin/ew2 %%%%{buildroot}/usr/bin/ew2-Mod\n%%%%files\n/usr/bin/ew2\n/usr/bin/ew2-Mod\n' "$VER" > ew2.spec
+              rpmbuild -bb ew2.spec --define "_topdir $(pwd)/rpm" --define "_sourcedir $(pwd)" 2>/dev/null || echo "RPM build skipped"
+              echo "ASSET=ew2-${VER}-1.x86_64.rpm" >> $GITHUB_ENV
+              ;;
+            alpine)
+              mkdir -p pkg-apk/usr/bin
+              cp dist/ew2 pkg-apk/usr/bin/ew2
+              cp dist/ew2-Mod pkg-apk/usr/bin/ew2-Mod
+              chmod 755 pkg-apk/usr/bin/ew2 pkg-apk/usr/bin/ew2-Mod
+              tar -czf "ew2-${VER}-r0.apk" pkg-apk/
+              echo "ASSET=ew2-${VER}-r0.apk" >> $GITHUB_ENV
+              ;;
+          esac
+
+      - name: Generate checksums
+        working-directory: ${{ github.workspace }}
+        run: |
+          echo "## ${{ matrix.distro }}" >> "checksums-${{ matrix.distro }}.txt"
+          sha256sum dist/ew2 dist/ew2-Mod >> "checksums-${{ matrix.distro }}.txt" 2>/dev/null || shasum -a 256 dist/ew2 dist/ew2-Mod >> "checksums-${{ matrix.distro }}.txt" 2>/dev/null
+          if [ -n "${{ env.ASSET }}" ] && [ -f "${{ env.ASSET }}" ]; then
+            sha256sum "${{ env.ASSET }}" >> "checksums-${{ matrix.distro }}.txt" 2>/dev/null || shasum -a 256 "${{ env.ASSET }}" >> "checksums-${{ matrix.distro }}.txt" 2>/dev/null
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.distro }}
+          path: |
+            dist/ew2
+            dist/ew2-Mod
+            ${{ env.ASSET }}
+            checksums-${{ matrix.distro }}.txt
+          if-no-files-found: warn
+          retention-days: 1
+
+  build-universal:
+    runs-on: ubuntu-latest
+    container: python:3.14-slim
+
+    steps:
+      - name: Install system deps
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq python3-tk git curl binutils 2>/dev/null || true
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Python deps
+        run: pip install pyinstaller aiohttp rich pydantic
+
+      - name: Build ew2
+        working-directory: ${{ github.workspace }}
+        run: python -m PyInstaller klatom.spec --clean --noconfirm
+
+      - name: Build ew2-Mod
+        working-directory: ${{ github.workspace }}
+        run: python -m PyInstaller ew2mod.spec --clean --noconfirm
+
+      - name: Package universal Linux
+        working-directory: ${{ github.workspace }}
+        run: |
+          VER="${{ inputs.tag || github.ref_name || '4.0.0' }}"
+          VER="${VER#v}"
+          TARBALL="ew2-${VER}-linux-x86_64.tar.gz"
+          mkdir -p "ew2-${VER}-linux-x86_64"
+          cp dist/ew2 "ew2-${VER}-linux-x86_64/ew2"
+          cp dist/ew2-Mod "ew2-${VER}-linux-x86_64/ew2-Mod"
+          chmod 755 "ew2-${VER}-linux-x86_64/ew2" "ew2-${VER}-linux-x86_64/ew2-Mod"
+          printf 'ew2 v%s - Linux x86_64\n\nRequirements:\n  - Python 3.10+\n  - python3-tk (Debian/Ubuntu: sudo apt install python3-tk)\n  - Or just run the binary directly (all deps bundled)\n\nQuick start:\n  chmod +x ew2\n  ./ew2\n\nDiscord: https://discord.gg/7FXYFJAYsz\n' "$VER" > "ew2-${VER}-linux-x86_64/README.txt"
+          tar -czf "$TARBALL" "ew2-${VER}-linux-x86_64/"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-universal
+          path: ew2-*-linux-x86_64.tar.gz
+          if-no-files-found: warn
+          retention-days: 1
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: [build-linux, build-universal]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: true
+
+      - name: List artifacts
+        run: find artifacts/ -type f | head -50
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          echo "Uploading to tag: $TAG"
+          # Merge all checksums
+          cat artifacts/checksums-*.txt > merged-checksums.txt 2>/dev/null || true
+          # Upload binaries and packages (not checksums yet)
+          find artifacts/ -type f -not -name "checksums*" | while read -r f; do
+            echo "Uploading: $f"
+            gh release upload "$TAG" "$f" --repo ew2k26/ew2 --clobber || echo "WARN: failed to upload $f"
+          done
+          # Upload merged checksums
+          gh release upload "$TAG" merged-checksums.txt --repo ew2k26/ew2 --clobber --clobber || true

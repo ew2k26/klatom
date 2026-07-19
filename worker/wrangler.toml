@@ -1,0 +1,11 @@
+name = "ew2-payment"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "ew2_data"
+id = "178014e68bff4c3ea07c8950900e98e1"
+
+# Admin token: jewmax34
+# RESEND_API_KEY (optional) - for email delivery
+# STRIPE_WEBHOOK_SECRET (optional) - for Stripe webhooks
